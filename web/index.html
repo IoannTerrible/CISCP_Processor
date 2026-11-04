@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CISC-8 Processor Visualizer</title>
+  <meta name="description" content="Animated visualizer of the CISC-8 processor simulator: watch instructions move across the buses, through the ALU and into the registers.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='6' width='20' height='20' rx='3' fill='%2322d3ee'/%3E%3Crect x='11' y='11' width='10' height='10' rx='1' fill='%230a0e16'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-chip" aria-hidden="true"></span>
+      <span class="brand-name">CISC-8</span>
+      <span class="brand-sub">Processor Visualizer</span>
+    </div>
+    <div class="toolbar">
+      <label class="field">
+        <span>Program</span>
+        <select id="sample-select" title="Load a sample program"></select>
+      </label>
+      <button id="btn-assemble" class="btn" title="Assemble the source and load it into memory (Ctrl+Enter)">Assemble</button>
+      <button id="btn-run" class="btn primary" title="Run / pause (F5)">Run</button>
+      <button id="btn-step" class="btn" title="Execute one instruction (F8)">Step</button>
+      <button id="btn-reset" class="btn" title="Reset the processor and reload the program">Reset</button>
+      <label class="field speed">
+        <span>Speed</span>
+        <input id="speed" type="range" min="1" max="10" value="5" aria-label="Animation speed">
+        <output id="speed-label" for="speed">normal</output>
+      </label>
+      <label class="field engine" id="engine-field" hidden>
+        <span>Engine</span>
+        <select id="engine-select" title="Where the program runs: in the browser or on the .NET server"></select>
+      </label>
+      <button id="btn-reference" class="btn ghost" title="Instruction set reference">Instruction set</button>
+      <button id="btn-theme" class="btn ghost" title="Toggle light / dark theme">Theme</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="column column-program">
+      <div class="panel panel-editor">
+        <div class="panel-head">
+          <h2>Source</h2>
+          <span id="program-stats" class="panel-meta"></span>
+        </div>
+        <div class="editor">
+          <pre id="gutter" class="gutter" aria-hidden="true"></pre>
+          <textarea id="source" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="Assembly source"></textarea>
+        </div>
+        <div id="assemble-error" class="error" hidden></div>
+      </div>
+      <div class="panel panel-listing">
+        <div class="panel-head">
+          <h2>Listing</h2>
+          <span class="panel-meta">click an address to toggle a breakpoint</span>
+        </div>
+        <div id="listing" class="listing" role="table"></div>
+      </div>
+    </section>
+
+    <section class="column column-machine">
+      <div class="stage" id="stage">
+        <div class="die" id="die">
+          <div class="die-label">CISC-8 &middot; 8 bit CISC core</div>
+
+          <div class="block control-unit">
+            <div class="block-title">Control unit</div>
+            <ol class="phases" aria-label="Instruction cycle">
+              <li id="phase-fetch" class="phase" data-phase="fetch"><span class="phase-dot"></span>Fetch</li>
+              <li id="phase-decode" class="phase" data-phase="decode"><span class="phase-dot"></span>Decode</li>
+              <li id="phase-execute" class="phase" data-phase="execute"><span class="phase-dot"></span>Execute</li>
+            </ol>
+            <div class="decoded">
+              <span class="decoded-label">IR</span>
+              <span class="reg mini" id="reg-IR"><span class="reg-name">IR</span><span class="reg-value">00</span></span>
+              <span id="decoded-text" class="decoded-text">&mdash;</span>
+            </div>
+            <div class="clock">
+              <span id="clock-led" class="led amber" aria-hidden="true"></span>
+              <span>clock</span>
+              <span class="clock-stat"><b id="stat-cycles">0</b> cycles</span>
+              <span class="clock-stat"><b id="stat-instructions">0</b> instructions</span>
+            </div>
+          </div>
+
+          <div class="block registers">
+            <div class="block-title">Register file</div>
+            <div class="reg-grid" id="registers">
+              <span class="reg acc" id="reg-A"><span class="reg-name">A</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-IP"><span class="reg-name">IP</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-SP"><span class="reg-name">SP</span><span class="reg-value">FF</span></span>
+              <span class="reg" id="reg-R0"><span class="reg-name">R0</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-R1"><span class="reg-name">R1</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-R2"><span class="reg-name">R2</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-R3"><span class="reg-name">R3</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-R4"><span class="reg-name">R4</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-R5"><span class="reg-name">R5</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-R6"><span class="reg-name">R6</span><span class="reg-value">00</span></span>
+              <span class="reg" id="reg-R7"><span class="reg-name">R7</span><span class="reg-value">00</span></span>
+            </div>
+            <div class="bus-regs">
+              <span class="reg bus-reg addr" id="reg-MAR"><span class="reg-name">MAR</span><span class="reg-value">00</span></span>
+              <span class="reg bus-reg data" id="reg-MDR"><span class="reg-name">MDR</span><span class="reg-value">00</span></span>
+            </div>
+          </div>
+
+          <div class="block alu-block">
+            <div class="block-title">ALU</div>
+            <div class="alu" id="alu">
+              <div class="alu-inputs">
+                <span class="alu-port" id="alu-a"><span class="port-label">A</span><span class="port-value">--</span></span>
+                <span class="alu-port" id="alu-b"><span class="port-label">B</span><span class="port-value">--</span></span>
+              </div>
+              <div class="alu-body">
+                <span id="alu-op" class="alu-op">idle</span>
+              </div>
+              <div class="alu-result"><span class="port-label">result</span><span class="port-value" id="alu-result">--</span></div>
+            </div>
+            <div class="flags" id="flags" aria-label="Flags">
+              <span class="flag" id="flag-z" title="Zero"><span class="led"></span>Z</span>
+              <span class="flag" id="flag-c" title="Carry"><span class="led"></span>C</span>
+              <span class="flag" id="flag-n" title="Negative"><span class="led"></span>N</span>
+              <span class="flag" id="flag-v" title="Overflow"><span class="led"></span>V</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="buses" aria-hidden="true">
+          <div class="bus-lane addr" id="lane-addr"><span class="lane-label">address bus</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
+          <div class="bus-lane data" id="lane-data"><span class="lane-label">data bus</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
+        </div>
+
+        <div class="memory-block">
+          <div class="block-title memory-title">
+            <span>Main memory &middot; 256 bytes</span>
+            <span class="legend">
+              <i class="sw code"></i>code <i class="sw data"></i>data <i class="sw stack"></i>stack <i class="sw current"></i>IP
+            </span>
+          </div>
+          <div class="memory" id="memory"></div>
+        </div>
+
+        <svg class="overlay" id="overlay" aria-hidden="true">
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
+              <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+            </filter>
+          </defs>
+        </svg>
+      </div>
+
+      <div class="io">
+        <div class="panel panel-console">
+          <div class="panel-head"><h2>Output ports</h2><span class="panel-meta">port 0 = numbers, port 1 = characters</span></div>
+          <div class="console" id="console"><span class="console-text" id="console-text"></span><span class="cursor"></span></div>
+        </div>
+        <div class="panel panel-trace">
+          <div class="panel-head"><h2>Execution trace</h2><button id="btn-clear-trace" class="btn tiny ghost">clear</button></div>
+          <div class="trace" id="trace"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status-badge" class="badge ready">Ready</span>
+    <span id="status-text" class="status-text">Load a sample or write a program, then press Run.</span>
+    <span class="status-stats">
+      <span>IP <b id="stat-ip">00</b></span>
+      <span>SP <b id="stat-sp">FF</b></span>
+      <span>Phase <b id="stat-phase">idle</b></span>
+      <span>Engine <b id="stat-engine">JavaScript</b></span>
+    </span>
+  </footer>
+
+  <dialog id="reference" class="reference">
+    <div class="reference-head">
+      <h2>CISC-8 instruction set</h2>
+      <button id="btn-close-reference" class="btn ghost">Close</button>
+    </div>
+    <p class="reference-intro">
+      Operands: <code>A</code>, <code>R0</code>..<code>R7</code>, <code>SP</code>, <code>FLAGS</code>, <code>imm8</code> (number, <code>'c'</code> or label),
+      <code>[addr]</code> direct, <code>[Rn]</code> register indirect, <code>[addr+Rn]</code> indexed.
+      Directives: <code>.org addr</code>, <code>.db v, "text"</code>, <code>.ds count</code>, <code>.equ NAME, value</code>.
+      Numbers: <code>255</code>, <code>0xFF</code>, <code>$FF</code>, <code>0b11111111</code>. Comments start with <code>;</code>.
+    </p>
+    <div id="reference-table" class="reference-table"></div>
+  </dialog>
+
+  <script src="js/isa.js"></script>
+  <script src="js/cpu.js"></script>
+  <script src="js/assembler.js"></script>
+  <script src="js/samples.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

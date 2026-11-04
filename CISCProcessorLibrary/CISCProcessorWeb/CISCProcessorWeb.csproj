@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>CISCProcessorWeb</RootNamespace>
+    <Description>Web host for the CISC-8 visualizer: serves the page from ../../web and runs programs on the .NET core.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CISCProcessorLibrary\CISCProcessorLibrary.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The visualizer lives in the repository root (web/) so it can also be opened directly or hosted statically. -->
+    <Content Include="..\..\web\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
