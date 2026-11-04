@@ -1,9 +1,11 @@
 using CISCProcessorLibrary;
+using CISCProcessorLibrary.Timing;
 using CISCProcessorWeb;
 using static CISCProcessorWeb.Dtos;
 
-// CISCProcessorWeb hosts the visualizer page (copied from ../../web into wwwroot at build time) and exposes
-// a small JSON API so the page can run programs on the real .NET processor instead of its JavaScript mirror.
+// CISCProcessorWeb hosts the visualizer page (the repository's web/ folder, copied into wwwroot for published
+// builds) and exposes a small JSON API so the page can run programs on the real .NET processor instead of
+// its JavaScript mirror.
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -18,14 +20,17 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 string runtime = $".NET {Environment.Version}";
+MicroarchitectureDto[] microarchitectures = Enum.GetValues<Microarchitecture>().Select(Dtos.ToDto).ToArray();
 
 RouteGroupBuilder api = app.MapGroup("/api");
 
-api.MapGet("/info", () => new Info($"{SimulatorInfo.Name} .NET core", SimulatorInfo.Version, runtime, InstructionSet.Default.All.Count));
+api.MapGet("/info", () => new Info($"{SimulatorInfo.Name} .NET core", SimulatorInfo.Version, runtime, InstructionSet.Default.All.Count, microarchitectures));
 
 api.MapGet("/instructions", () => InstructionSet.Default.All.Select(ToDto));
 
 api.MapGet("/samples", () => SamplePrograms.All);
+
+api.MapGet("/microarchitectures", () => microarchitectures);
 
 api.MapPost("/assemble", (SourceRequest request) =>
 {
@@ -39,7 +44,7 @@ api.MapPost("/assemble", (SourceRequest request) =>
     }
 });
 
-api.MapPost("/sessions", (SourceRequest request, SessionStore store) =>
+api.MapPost("/sessions", (SessionRequest request, SessionStore store) =>
 {
     AssembledProgram program;
     try
@@ -51,16 +56,17 @@ api.MapPost("/sessions", (SourceRequest request, SessionStore store) =>
         return Results.BadRequest(new AssemblyError(ex.Line, ex.Message, ex.Detail));
     }
 
-    MachineSession session = store.Create(program);
-    return Results.Ok(new SessionDto(session.Id, ToDto(program), ToDto(session.Cpu.GetState(), null)));
+    if (!Enum.TryParse(request.Microarchitecture ?? nameof(Microarchitecture.Classic1975), ignoreCase: true, out Microarchitecture microarchitecture))
+        return Results.BadRequest(new { message = $"Unknown micro-architecture '{request.Microarchitecture}'." });
+
+    MachineSession session = store.Create(program, microarchitecture, request.Input);
+    return Results.Ok(ToDto(session));
 });
 
 api.MapGet("/sessions/{id}", (string id, SessionStore store) =>
 {
     MachineSession? session = store.Find(id);
-    return session is null
-        ? Results.NotFound(new { message = "Unknown session." })
-        : Results.Ok(new SessionDto(session.Id, ToDto(session.Program), session.Locked(() => ToDto(session.Cpu.GetState(), session.Cpu.FaultMessage))));
+    return session is null ? Results.NotFound(new { message = "Unknown session." }) : Results.Ok(session.Locked(() => ToDto(session)));
 });
 
 api.MapPost("/sessions/{id}/step", (string id, SessionStore store) =>
@@ -69,7 +75,7 @@ api.MapPost("/sessions/{id}/step", (string id, SessionStore store) =>
     if (session is null) return Results.NotFound(new { message = "Unknown session." });
     if (session.Cpu.Halted) return Results.Conflict(new { message = "The processor is halted. Reset it first." });
 
-    TraceDto trace = session.Locked(() => ToDto(session.Cpu.Step(), session.Cpu.FaultMessage));
+    TraceDto trace = session.Locked(() => ToDto(session.Cpu.Step(), session.Cpu));
     return Results.Ok(new { trace });
 });
 
@@ -78,7 +84,7 @@ api.MapPost("/sessions/{id}/run", (string id, RunRequest request, SessionStore s
     MachineSession? session = store.Find(id);
     if (session is null) return Results.NotFound(new { message = "Unknown session." });
 
-    int budget = Math.Clamp(request.MaxInstructions ?? 512, 1, 5000);
+    int budget = Math.Clamp(request.MaxSteps ?? 512, 1, 5000);
     var stopAt = new HashSet<int>(request.StopAt ?? Array.Empty<int>());
     List<TraceDto> traces = session.Locked(() =>
     {
@@ -86,8 +92,8 @@ api.MapPost("/sessions/{id}/run", (string id, RunRequest request, SessionStore s
         CISCProcessor cpu = session.Cpu;
         while (list.Count < budget && !cpu.Halted)
         {
-            if (list.Count > 0 && stopAt.Contains(cpu.InstructionPointer)) break;
-            list.Add(ToDto(cpu.Step(), cpu.FaultMessage));
+            if (list.Count > 0 && !cpu.Waiting && cpu.PendingInterrupts == 0 && stopAt.Contains(cpu.InstructionPointer)) break;
+            list.Add(ToDto(cpu.Step(), cpu));
         }
         return list;
     });
@@ -99,12 +105,26 @@ api.MapPost("/sessions/{id}/reset", (string id, SessionStore store) =>
     MachineSession? session = store.Find(id);
     if (session is null) return Results.NotFound(new { message = "Unknown session." });
 
+    SessionDto dto = session.Locked(() =>
+    {
+        session.Load();
+        return ToDto(session);
+    });
+    return Results.Ok(dto);
+});
+
+api.MapPost("/sessions/{id}/input", (string id, InputRequest request, SessionStore store) =>
+{
+    MachineSession? session = store.Find(id);
+    if (session is null) return Results.NotFound(new { message = "Unknown session." });
+
+    string text = request.Text ?? string.Empty;
     StateDto state = session.Locked(() =>
     {
-        session.Cpu.LoadProgram(session.Program);
-        return ToDto(session.Cpu.GetState(), null);
+        session.Cpu.InputDevice.Enqueue(text);
+        return ToDto(session.Cpu);
     });
-    return Results.Ok(new { state });
+    return Results.Ok(new { state, queued = session.Cpu.InputDevice.PeekText() });
 });
 
 api.MapDelete("/sessions/{id}", (string id, SessionStore store) =>

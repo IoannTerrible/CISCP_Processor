@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CISC-8 Processor Visualizer</title>
-  <meta name="description" content="Animated visualizer of the CISC-8 processor simulator: watch instructions move across the buses, through the ALU and into the registers.">
+  <title>CISC-16 Processor Visualizer</title>
+  <meta name="description" content="Animated visualizer of the CISC-16 processor simulator: watch instructions move across the buses, through the ALU and into the registers, on a 1975, 1985 or 1995 style micro-architecture.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -15,7 +15,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-chip" aria-hidden="true"></span>
-      <span class="brand-name">CISC-8</span>
+      <span class="brand-name">CISC-16</span>
       <span class="brand-sub">Processor Visualizer</span>
     </div>
     <div class="toolbar">
@@ -23,9 +23,17 @@
         <span>Program</span>
         <select id="sample-select" title="Load a sample program"></select>
       </label>
+      <label class="field era">
+        <span>Era</span>
+        <select id="arch-select" title="Which generation of micro-architecture times the program">
+          <option value="Classic1975">1975 multi-cycle</option>
+          <option value="Prefetch1985">1985 prefetch queue</option>
+          <option value="Pipelined1995">1995 pipeline + caches</option>
+        </select>
+      </label>
       <button id="btn-assemble" class="btn" title="Assemble the source and load it into memory (Ctrl+Enter)">Assemble</button>
       <button id="btn-run" class="btn primary" title="Run / pause (F5)">Run</button>
-      <button id="btn-step" class="btn" title="Execute one instruction (F8)">Step</button>
+      <button id="btn-step" class="btn" title="Execute one step (F8)">Step</button>
       <button id="btn-reset" class="btn" title="Reset the processor and reload the program">Reset</button>
       <label class="field speed">
         <span>Speed</span>
@@ -61,12 +69,34 @@
         </div>
         <div id="listing" class="listing" role="table"></div>
       </div>
+      <div class="panel panel-devices">
+        <div class="panel-head"><h2>Devices</h2><span class="panel-meta">interrupts, timer, input</span></div>
+        <div class="devices">
+          <div class="device">
+            <div class="device-title">Interrupt lines <span class="led-row" id="irq-leds"></span></div>
+            <div class="device-row"><span>I flag</span><span class="flag" id="flag-i-device"><span class="led"></span>enabled</span></div>
+          </div>
+          <div class="device">
+            <div class="device-title">Timer (IRQ 0)</div>
+            <div class="device-row"><span>period</span><b id="timer-period">0</b><span>cycles</span><span class="led amber" id="timer-led"></span><span id="timer-state">off</span></div>
+            <div class="device-row"><span>ticks</span><b id="timer-ticks">0</b></div>
+          </div>
+          <div class="device">
+            <div class="device-title">Input device (ports 1, 6)</div>
+            <div class="device-row input-row">
+              <input id="input-text" type="text" placeholder="text for IN A, 1" aria-label="Input text">
+              <button id="btn-send-input" class="btn tiny">Send</button>
+            </div>
+            <div class="device-row"><span>queue</span><code id="input-queue" class="queue-text">(empty)</code></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="column column-machine">
       <div class="stage" id="stage">
         <div class="die" id="die">
-          <div class="die-label">CISC-8 &middot; 8 bit CISC core</div>
+          <div class="die-label">CISC-16 &middot; 8 bit data path &middot; 16 bit addresses</div>
 
           <div class="block control-unit">
             <div class="block-title">Control unit</div>
@@ -74,6 +104,8 @@
               <li id="phase-fetch" class="phase" data-phase="fetch"><span class="phase-dot"></span>Fetch</li>
               <li id="phase-decode" class="phase" data-phase="decode"><span class="phase-dot"></span>Decode</li>
               <li id="phase-execute" class="phase" data-phase="execute"><span class="phase-dot"></span>Execute</li>
+              <li id="phase-interrupt" class="phase special" data-phase="interrupt"><span class="phase-dot"></span>IRQ</li>
+              <li id="phase-waiting" class="phase special" data-phase="waiting"><span class="phase-dot"></span>Wait</li>
             </ol>
             <div class="decoded">
               <span class="decoded-label">IR</span>
@@ -85,6 +117,7 @@
               <span>clock</span>
               <span class="clock-stat"><b id="stat-cycles">0</b> cycles</span>
               <span class="clock-stat"><b id="stat-instructions">0</b> instructions</span>
+              <span class="clock-stat"><b id="stat-last-cycles">0</b> last step</span>
             </div>
           </div>
 
@@ -92,8 +125,6 @@
             <div class="block-title">Register file</div>
             <div class="reg-grid" id="registers">
               <span class="reg acc" id="reg-A"><span class="reg-name">A</span><span class="reg-value">00</span></span>
-              <span class="reg" id="reg-IP"><span class="reg-name">IP</span><span class="reg-value">00</span></span>
-              <span class="reg" id="reg-SP"><span class="reg-name">SP</span><span class="reg-value">FF</span></span>
               <span class="reg" id="reg-R0"><span class="reg-name">R0</span><span class="reg-value">00</span></span>
               <span class="reg" id="reg-R1"><span class="reg-name">R1</span><span class="reg-value">00</span></span>
               <span class="reg" id="reg-R2"><span class="reg-name">R2</span><span class="reg-value">00</span></span>
@@ -103,8 +134,15 @@
               <span class="reg" id="reg-R6"><span class="reg-name">R6</span><span class="reg-value">00</span></span>
               <span class="reg" id="reg-R7"><span class="reg-name">R7</span><span class="reg-value">00</span></span>
             </div>
+            <div class="reg-grid wide" id="address-registers">
+              <span class="reg w16" id="reg-SI"><span class="reg-name">SI</span><span class="reg-value">0000</span></span>
+              <span class="reg w16" id="reg-DI"><span class="reg-name">DI</span><span class="reg-value">0000</span></span>
+              <span class="reg w16" id="reg-BP"><span class="reg-name">BP</span><span class="reg-value">0000</span></span>
+              <span class="reg w16" id="reg-SP"><span class="reg-name">SP</span><span class="reg-value">FFF0</span></span>
+              <span class="reg w16 ip" id="reg-IP"><span class="reg-name">IP</span><span class="reg-value">0000</span></span>
+            </div>
             <div class="bus-regs">
-              <span class="reg bus-reg addr" id="reg-MAR"><span class="reg-name">MAR</span><span class="reg-value">00</span></span>
+              <span class="reg bus-reg addr" id="reg-MAR"><span class="reg-name">MAR</span><span class="reg-value">0000</span></span>
               <span class="reg bus-reg data" id="reg-MDR"><span class="reg-name">MDR</span><span class="reg-value">00</span></span>
             </div>
           </div>
@@ -126,20 +164,51 @@
               <span class="flag" id="flag-c" title="Carry"><span class="led"></span>C</span>
               <span class="flag" id="flag-n" title="Negative"><span class="led"></span>N</span>
               <span class="flag" id="flag-v" title="Overflow"><span class="led"></span>V</span>
+              <span class="flag" id="flag-i" title="Interrupts enabled"><span class="led"></span>I</span>
+            </div>
+          </div>
+
+          <div class="block era-block" id="era-block">
+            <div class="block-title">Micro-architecture <span id="era-name" class="era-name"></span></div>
+            <div class="era-body">
+              <div class="era-view" id="era-classic">
+                <p class="era-text">Multi-cycle control unit: every bus cycle costs T-states and nothing overlaps. The clock below counts them.</p>
+                <div class="tstates" id="tstates"></div>
+              </div>
+              <div class="era-view" id="era-prefetch" hidden>
+                <div class="queue-label">Prefetch queue <span id="queue-address"></span></div>
+                <div class="queue" id="queue-cells"></div>
+              </div>
+              <div class="era-view" id="era-pipelined" hidden>
+                <div class="cache-row">
+                  <div class="cache"><div class="cache-label">I-cache</div><div class="cache-lines" id="icache"></div></div>
+                  <div class="cache"><div class="cache-label">D-cache</div><div class="cache-lines" id="dcache"></div></div>
+                  <div class="cache"><div class="cache-label">Branch predictor</div><div class="cache-lines predictor" id="predictor"></div></div>
+                </div>
+              </div>
+              <div class="era-stats" id="era-stats"></div>
+              <div class="era-event" id="era-event"></div>
             </div>
           </div>
         </div>
 
         <div class="buses" aria-hidden="true">
-          <div class="bus-lane addr" id="lane-addr"><span class="lane-label">address bus</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
-          <div class="bus-lane data" id="lane-data"><span class="lane-label">data bus</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
+          <div class="bus-lane addr" id="lane-addr"><span class="lane-label">address bus 16</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
+          <div class="bus-lane data" id="lane-data"><span class="lane-label">data bus 8</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
         </div>
 
         <div class="memory-block">
           <div class="block-title memory-title">
-            <span>Main memory &middot; 256 bytes</span>
+            <span class="memory-nav">
+              <button id="btn-page-prev" class="btn tiny ghost" title="Previous page">&#9664;</button>
+              <span>page <b id="memory-page">00</b></span>
+              <button id="btn-page-next" class="btn tiny ghost" title="Next page">&#9654;</button>
+              <button id="btn-page-ip" class="btn tiny ghost" title="Show the page IP points to">IP</button>
+              <button id="btn-page-sp" class="btn tiny ghost" title="Show the page SP points to">SP</button>
+              <label class="follow" title="Switch the page to every address the processor touches"><input id="follow-bus" type="checkbox" checked> follow</label>
+            </span>
             <span class="legend">
-              <i class="sw code"></i>code <i class="sw data"></i>data <i class="sw stack"></i>stack <i class="sw current"></i>IP
+              <i class="sw code"></i>code <i class="sw data"></i>data <i class="sw stack"></i>stack <i class="sw vector"></i>vectors <i class="sw current"></i>IP
             </span>
           </div>
           <div class="memory" id="memory"></div>
@@ -172,28 +241,32 @@
     <span id="status-badge" class="badge ready">Ready</span>
     <span id="status-text" class="status-text">Load a sample or write a program, then press Run.</span>
     <span class="status-stats">
-      <span>IP <b id="stat-ip">00</b></span>
-      <span>SP <b id="stat-sp">FF</b></span>
+      <span>IP <b id="stat-ip">0000</b></span>
+      <span>SP <b id="stat-sp">FFF0</b></span>
       <span>Phase <b id="stat-phase">idle</b></span>
+      <span>Era <b id="stat-era">1975</b></span>
       <span>Engine <b id="stat-engine">JavaScript</b></span>
     </span>
   </footer>
 
   <dialog id="reference" class="reference">
     <div class="reference-head">
-      <h2>CISC-8 instruction set</h2>
+      <h2>CISC-16 instruction set</h2>
       <button id="btn-close-reference" class="btn ghost">Close</button>
     </div>
     <p class="reference-intro">
-      Operands: <code>A</code>, <code>R0</code>..<code>R7</code>, <code>SP</code>, <code>FLAGS</code>, <code>imm8</code> (number, <code>'c'</code> or label),
-      <code>[addr]</code> direct, <code>[Rn]</code> register indirect, <code>[addr+Rn]</code> indexed.
-      Directives: <code>.org addr</code>, <code>.db v, "text"</code>, <code>.ds count</code>, <code>.equ NAME, value</code>.
-      Numbers: <code>255</code>, <code>0xFF</code>, <code>$FF</code>, <code>0b11111111</code>. Comments start with <code>;</code>.
+      Registers: <code>A</code> and <code>R0</code>..<code>R7</code> (8 bit), <code>SI</code>, <code>DI</code>, <code>BP</code>, <code>SP</code> (16 bit), <code>FLAGS</code> = Z C N V I.
+      Operands: <code>imm8</code> / <code>imm16</code> (number, <code>'c'</code> or label), <code>[addr]</code> direct, <code>[Rn]</code> zero page indirect,
+      <code>[addr+Rn]</code> indexed, <code>[SI]</code> register indirect, <code>[BP+disp]</code> / <code>[BP-disp]</code> based.
+      Directives: <code>.org addr</code>, <code>.db v, "text"</code>, <code>.dw word, label</code>, <code>.ds count</code>, <code>.equ NAME, value</code>.
+      Ports: <code>OUT 0</code> number, <code>OUT 1</code> character, <code>OUT 2/3</code> timer period, <code>OUT 4</code> timer control,
+      <code>IN A, 1</code> input, <code>IN A, 6</code> input status. Interrupt vectors live at <code>0xFFF0</code> + 2 &times; IRQ, R6 is the REP count, R7 the high byte of MUL / DIV.
     </p>
     <div id="reference-table" class="reference-table"></div>
   </dialog>
 
   <script src="js/isa.js"></script>
+  <script src="js/timing.js"></script>
   <script src="js/cpu.js"></script>
   <script src="js/assembler.js"></script>
   <script src="js/samples.js"></script>

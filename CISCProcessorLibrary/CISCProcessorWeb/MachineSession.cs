@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using CISCProcessorLibrary;
+using CISCProcessorLibrary.Timing;
 
 namespace CISCProcessorWeb;
 
@@ -8,12 +9,13 @@ public sealed class MachineSession
 {
     private readonly object gate = new();
 
-    public MachineSession(string id, AssembledProgram program)
+    public MachineSession(string id, AssembledProgram program, Microarchitecture microarchitecture, string? input)
     {
         Id = id;
         Program = program;
-        Cpu = new CISCProcessor();
-        Cpu.LoadProgram(program);
+        Input = input ?? string.Empty;
+        Cpu = new CISCProcessor(microarchitecture);
+        Load();
         Touch();
     }
 
@@ -21,11 +23,21 @@ public sealed class MachineSession
 
     public AssembledProgram Program { get; }
 
+    /// <summary>Text queued into the input device on every (re)load.</summary>
+    public string Input { get; set; }
+
     public CISCProcessor Cpu { get; }
 
     public DateTime LastUsedUtc { get; private set; }
 
     public void Touch() => LastUsedUtc = DateTime.UtcNow;
+
+    /// <summary>Reloads the program and refills the input queue.</summary>
+    public void Load()
+    {
+        Cpu.LoadProgram(Program);
+        if (Input.Length > 0) Cpu.InputDevice.Enqueue(Input);
+    }
 
     /// <summary>Runs <paramref name="work"/> while holding the session lock, so concurrent requests cannot interleave steps.</summary>
     public T Locked<T>(Func<T> work)
@@ -45,10 +57,10 @@ public sealed class SessionStore
     private const int MaxSessions = 500;
     private readonly ConcurrentDictionary<string, MachineSession> sessions = new();
 
-    public MachineSession Create(AssembledProgram program)
+    public MachineSession Create(AssembledProgram program, Microarchitecture microarchitecture, string? input)
     {
         Sweep();
-        var session = new MachineSession(Guid.NewGuid().ToString("N"), program);
+        var session = new MachineSession(Guid.NewGuid().ToString("N"), program, microarchitecture, input);
         sessions[session.Id] = session;
         return session;
     }

@@ -1,19 +1,21 @@
 /*
- * CISC-8 assembler - JavaScript mirror of CISCProcessorLibrary/Assembler.cs.
+ * CISC-16 assembler - JavaScript mirror of CISCProcessorLibrary/Assembler.cs.
  * Syntax:  [label:] MNEMONIC [operand[, operand]] [; comment]
- * Operands: A, R0..R7, SP, FLAGS, number / label, [addr], [Rn], [addr+Rn]
+ * Operands: A, R0..R7, SI, DI, BP, SP, FLAGS, number / label, [addr], [Rn], [addr+Rn], [SI], [BP+disp]
  * Numbers: 123, 0x7F, $7F, 0b1010, 'c'; expressions may add and subtract terms.
- * Directives: .org addr | .db v, "text" | .ds count | .equ NAME, value
+ * Directives: .org addr | .db v, "text" | .dw word, label | .ds count | .equ NAME, value
  */
 (function (global) {
   'use strict';
 
   const ISA = global.CISC.ISA;
-  const MEMORY_SIZE = 256;
+  const MEMORY_SIZE = 65536;
   const LABEL = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:(.*)$/;
   const REGISTER = /^R([0-7])$/i;
+  const XREGISTER = /^(SI|DI|BP|SP)$/i;
+  const BASED = /^(SI|DI|BP|SP)\s*([+-].+)$/i;
   const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-  const RESERVED = new Set(['A', 'SP', 'FLAGS', 'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7']);
+  const RESERVED = new Set(['A', 'FLAGS', 'SI', 'DI', 'BP', 'SP', 'R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7']);
 
   class AssemblyError extends Error {
     constructor(line, detail) {
@@ -22,6 +24,8 @@
       this.detail = detail;
     }
   }
+
+  const xregCode = (name) => ISA.ADDRESS_REGISTERS.indexOf(name.toUpperCase());
 
   function stripComment(line) {
     let quote = null;
@@ -110,21 +114,34 @@
     if (value < -128 || value > 255) throw new AssemblyError(line, what + ' ' + value + ' does not fit in one byte (-128..255).');
     return value & 0xFF;
   }
+  function toDisplacement(value, line) {
+    if (value < -128 || value > 127) throw new AssemblyError(line, 'Displacement ' + value + ' does not fit in a signed byte (-128..127).');
+    return value & 0xFF;
+  }
+  function toWord(value, line, what) {
+    if (value < -32768 || value > 65535) throw new AssemblyError(line, what + ' ' + value + ' does not fit in 16 bits (-32768..65535).');
+    return value & 0xFFFF;
+  }
 
   function parseOperand(text, line) {
     text = text.trim();
     if (text.length === 0) throw new AssemblyError(line, 'Empty operand.');
     const upper = text.toUpperCase();
     if (upper === 'A') return { kind: 'acc' };
-    if (upper === 'SP') return { kind: 'sp' };
     if (upper === 'FLAGS') return { kind: 'flags' };
     let m = REGISTER.exec(text);
     if (m) return { kind: 'reg', register: Number(m[1]) };
+    m = XREGISTER.exec(text);
+    if (m) return { kind: 'xreg', register: xregCode(m[1]) };
     if (text.startsWith('[') && text.endsWith(']')) {
       const inner = text.slice(1, -1).trim();
       if (inner.length === 0) throw new AssemblyError(line, 'Empty memory operand [].');
       m = REGISTER.exec(inner);
       if (m) return { kind: 'indirect', register: Number(m[1]) };
+      m = XREGISTER.exec(inner);
+      if (m) return { kind: 'xind', register: xregCode(m[1]) };
+      m = BASED.exec(inner);
+      if (m) return { kind: 'xdisp', register: xregCode(m[1]), expression: m[2] };
       const plus = inner.lastIndexOf('+');
       if (plus > 0) {
         const left = inner.slice(0, plus).trim();
@@ -143,8 +160,9 @@
   function matches(syntax, operands) {
     if (syntax.operands.length !== operands.length) return false;
     return syntax.operands.every((slot, i) => {
-      const actual = operands[i].kind;
-      return slot.kind === actual || (ISA.isNumericKind(slot.kind) && ISA.isNumericKind(actual));
+      const operand = operands[i];
+      if (slot.kind === 'literal') return operand.kind === 'imm' && String(operand.expression).toUpperCase() === slot.literal;
+      return slot.kind === operand.kind || (ISA.isNumericKind(slot.kind) && ISA.isNumericKind(operand.kind));
     });
   }
 
@@ -167,7 +185,7 @@
     // Pass 1: parse, pick the instruction form, assign addresses, collect labels.
     lines.forEach((rawLine, index) => {
       const lineNumber = index + 1;
-      const statement = { lineNumber, source: rawLine, address: location, length: 0, instruction: null, operands: [], dataItems: null, reserved: 0 };
+      const statement = { lineNumber, source: rawLine, address: location, length: 0, instruction: null, operands: [], dataItems: null, dataWords: false, reserved: 0 };
       statements.push(statement);
 
       let text = stripComment(rawLine).trim();
@@ -198,11 +216,14 @@
             defineSymbol(symbols, parts[0], evaluate(parts[1], symbols, lineNumber), lineNumber);
             break;
           }
-          case '.DB': {
+          case '.DB':
+          case '.DW': {
+            const words = name.toUpperCase() === '.DW';
             const items = splitOperands(args);
-            if (items.length === 0) throw new AssemblyError(lineNumber, '.db needs at least one value.');
+            if (items.length === 0) throw new AssemblyError(lineNumber, name + ' needs at least one value.');
             statement.dataItems = items;
-            statement.length = items.reduce((n, item) => n + (isString(item) ? item.length - 2 : 1), 0);
+            statement.dataWords = words;
+            statement.length = items.reduce((n, item) => n + (isString(item) ? item.length - 2 : (words ? 2 : 1)), 0);
             if (location + statement.length > MEMORY_SIZE) throw new AssemblyError(lineNumber, 'Program does not fit in ' + MEMORY_SIZE + ' bytes of memory.');
             statement.address = location;
             location += statement.length;
@@ -219,7 +240,7 @@
             break;
           }
           default:
-            throw new AssemblyError(lineNumber, "Unknown directive '" + name + "'. Supported: .org, .db, .ds, .equ");
+            throw new AssemblyError(lineNumber, "Unknown directive '" + name + "'. Supported: .org, .db, .dw, .ds, .equ");
         }
         return;
       }
@@ -247,19 +268,18 @@
       for (let i = 0; i < bytes.length; i++) {
         const address = st.address + i;
         if (address >= MEMORY_SIZE) throw new AssemblyError(st.lineNumber, 'Program does not fit in ' + MEMORY_SIZE + ' bytes of memory.');
-        if (occupied[address]) throw new AssemblyError(st.lineNumber, 'Address 0x' + ISA.hex2(address) + ' is emitted twice (check your .org directives).');
+        if (occupied[address]) throw new AssemblyError(st.lineNumber, 'Address 0x' + ISA.hex4(address) + ' is emitted twice (check your .org directives).');
         occupied[address] = 1;
       }
-      return { lineNumber: st.lineNumber, address: st.address, bytes, source: st.source, isInstruction: st.instruction !== null, isData: st.dataItems !== null || st.reserved > 0 };
+      return { lineNumber: st.lineNumber, address: st.address, bytes, source: st.source, isInstruction: st.instruction !== null, isData: st.instruction === null && bytes.length > 0 };
     });
 
     const symbolTable = {};
     for (const [k, v] of symbols) symbolTable[k] = v;
-    return {
-      listing, symbols: symbolTable, entryPoint: entryPoint === null ? 0 : entryPoint,
-      length: listing.reduce((n, l) => n + l.bytes.length, 0),
-    };
+    return { listing, symbols: symbolTable, entryPoint: entryPoint === null ? 0 : entryPoint, length: listing.reduce((n, l) => n + l.bytes.length, 0) };
   }
+
+  function addWord(bytes, value) { bytes.push(value & 0xFF, (value >> 8) & 0xFF); }
 
   function emit(st, symbols) {
     const line = st.lineNumber;
@@ -268,18 +288,22 @@
       st.instruction.syntax.operands.forEach((slot, i) => {
         const operand = st.operands[i];
         switch (slot.kind) {
-          case 'reg':
-          case 'indirect':
+          case 'reg': case 'indirect': case 'xreg': case 'xind':
             bytes.push(operand.register);
             break;
           case 'imm':
-          case 'addr':
-          case 'direct':
             bytes.push(toByte(evaluate(operand.expression, symbols, line), line, 'Value'));
             break;
+          case 'imm16': case 'addr': case 'direct':
+            addWord(bytes, toWord(evaluate(operand.expression, symbols, line), line, slot.kind === 'imm16' ? 'Value' : 'Address'));
+            break;
           case 'indexed':
-            bytes.push(toByte(evaluate(operand.expression, symbols, line), line, 'Address'));
+            addWord(bytes, toWord(evaluate(operand.expression, symbols, line), line, 'Address'));
             bytes.push(operand.register);
+            break;
+          case 'xdisp':
+            bytes.push(operand.register);
+            bytes.push(toDisplacement(evaluate(operand.expression, symbols, line), line));
             break;
           default:
             break;
@@ -296,6 +320,8 @@
             if (code > 0xFF) throw new AssemblyError(line, "Character '" + ch + "' is not an 8 bit character.");
             bytes.push(code);
           }
+        } else if (st.dataWords) {
+          addWord(bytes, toWord(evaluate(item, symbols, line), line, 'Value'));
         } else {
           bytes.push(toByte(evaluate(item, symbols, line), line, 'Value'));
         }
