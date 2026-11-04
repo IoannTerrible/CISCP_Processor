@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CISC-16 Processor Visualizer</title>
+  <title data-i18n="app.title">CISC-16 Processor Visualizer</title>
   <meta name="description" content="Animated visualizer of the CISC-16 processor simulator: watch instructions move across the buses, through the ALU and into the registers, on a 1975, 1985 or 1995 style micro-architecture.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,36 +16,41 @@
     <div class="brand">
       <span class="brand-chip" aria-hidden="true"></span>
       <span class="brand-name">CISC-16</span>
-      <span class="brand-sub">Processor Visualizer</span>
+      <span class="brand-sub" data-i18n="brand.sub">Processor Visualizer</span>
     </div>
     <div class="toolbar">
       <label class="field">
-        <span>Program</span>
-        <select id="sample-select" title="Load a sample program"></select>
+        <span data-i18n="toolbar.program">Program</span>
+        <select id="sample-select" data-i18n-title="tip.sample" title="Load a sample program"></select>
       </label>
       <label class="field era">
-        <span>Era</span>
-        <select id="arch-select" title="Which generation of micro-architecture times the program">
-          <option value="Classic1975">1975 multi-cycle</option>
-          <option value="Prefetch1985">1985 prefetch queue</option>
-          <option value="Pipelined1995">1995 pipeline + caches</option>
+        <span data-i18n="toolbar.era">Era</span>
+        <select id="arch-select" data-i18n-title="tip.era" title="Which generation of micro-architecture times the program">
+          <option value="Classic1975" data-i18n="era.Classic1975">1975 multi-cycle</option>
+          <option value="Prefetch1985" data-i18n="era.Prefetch1985">1985 prefetch queue</option>
+          <option value="Pipelined1995" data-i18n="era.Pipelined1995">1995 pipeline + caches</option>
         </select>
       </label>
-      <button id="btn-assemble" class="btn" title="Assemble the source and load it into memory (Ctrl+Enter)">Assemble</button>
-      <button id="btn-run" class="btn primary" title="Run / pause (F5)">Run</button>
-      <button id="btn-step" class="btn" title="Execute one step (F8)">Step</button>
-      <button id="btn-reset" class="btn" title="Reset the processor and reload the program">Reset</button>
+      <button id="btn-assemble" class="btn" data-i18n="btn.assemble" data-i18n-title="tip.assemble" title="Assemble the source and load it into memory (Ctrl+Enter)">Assemble</button>
+      <button id="btn-run" class="btn primary" data-i18n-title="tip.run" title="Run / pause (F5)">Run</button>
+      <button id="btn-step" class="btn" data-i18n="btn.step" data-i18n-title="tip.step" title="Execute one step (F8)">Step</button>
+      <button id="btn-reset" class="btn" data-i18n="btn.reset" data-i18n-title="tip.reset" title="Reset the processor and reload the program">Reset</button>
       <label class="field speed">
-        <span>Speed</span>
+        <span data-i18n="toolbar.speed">Speed</span>
         <input id="speed" type="range" min="1" max="10" value="5" aria-label="Animation speed">
         <output id="speed-label" for="speed">normal</output>
       </label>
       <label class="field engine" id="engine-field" hidden>
-        <span>Engine</span>
-        <select id="engine-select" title="Where the program runs: in the browser or on the .NET server"></select>
+        <span data-i18n="toolbar.engine">Engine</span>
+        <select id="engine-select" data-i18n-title="tip.engine" title="Where the program runs: in the browser or on the .NET server"></select>
       </label>
-      <button id="btn-reference" class="btn ghost" title="Instruction set reference">Instruction set</button>
-      <button id="btn-theme" class="btn ghost" title="Toggle light / dark theme">Theme</button>
+      <button id="btn-guide" class="btn ghost" data-i18n="btn.guide" data-i18n-title="tip.guide" title="How the stand works and how to write programs">Guide</button>
+      <button id="btn-reference" class="btn ghost" data-i18n="btn.reference" data-i18n-title="tip.reference" title="Instruction set reference">Instruction set</button>
+      <button id="btn-theme" class="btn ghost" data-i18n="btn.theme" data-i18n-title="tip.theme" title="Toggle light / dark theme">Theme</button>
+    </div>
+    <div class="lang-switch" role="group" data-i18n-title="tip.lang" title="Interface language">
+      <button type="button" data-lang="en" class="active">EN</button>
+      <button type="button" data-lang="ru">RU</button>
     </div>
   </header>
 
@@ -53,7 +58,7 @@
     <section class="column column-program">
       <div class="panel panel-editor">
         <div class="panel-head">
-          <h2>Source</h2>
+          <h2 data-i18n="panel.source">Source</h2>
           <span id="program-stats" class="panel-meta"></span>
         </div>
         <div class="editor">
@@ -64,30 +69,30 @@
       </div>
       <div class="panel panel-listing">
         <div class="panel-head">
-          <h2>Listing</h2>
-          <span class="panel-meta">click an address to toggle a breakpoint</span>
+          <h2 data-i18n="panel.listing">Listing</h2>
+          <span class="panel-meta" data-i18n="listing.hint">click an address to toggle a breakpoint</span>
         </div>
         <div id="listing" class="listing" role="table"></div>
       </div>
       <div class="panel panel-devices">
-        <div class="panel-head"><h2>Devices</h2><span class="panel-meta">interrupts, timer, input</span></div>
+        <div class="panel-head"><h2 data-i18n="panel.devices">Devices</h2><span class="panel-meta" data-i18n="devices.hint">interrupts, timer, input</span></div>
         <div class="devices">
           <div class="device">
-            <div class="device-title">Interrupt lines <span class="led-row" id="irq-leds"></span></div>
-            <div class="device-row"><span>I flag</span><span class="flag" id="flag-i-device"><span class="led"></span>enabled</span></div>
+            <div class="device-title"><span data-i18n="dev.irq">Interrupt lines</span> <span class="led-row" id="irq-leds"></span></div>
+            <div class="device-row"><span data-i18n="dev.iflag">I flag</span><span class="flag" id="flag-i-device"><span class="led"></span><span data-i18n="dev.enabled">enabled</span></span></div>
           </div>
           <div class="device">
-            <div class="device-title">Timer (IRQ 0)</div>
-            <div class="device-row"><span>period</span><b id="timer-period">0</b><span>cycles</span><span class="led amber" id="timer-led"></span><span id="timer-state">off</span></div>
-            <div class="device-row"><span>ticks</span><b id="timer-ticks">0</b></div>
+            <div class="device-title" data-i18n="dev.timer">Timer (IRQ 0)</div>
+            <div class="device-row"><span data-i18n="dev.period">period</span><b id="timer-period">0</b><span data-i18n="dev.cycles">cycles</span><span class="led amber" id="timer-led"></span><span id="timer-state">off</span></div>
+            <div class="device-row"><span data-i18n="dev.ticks">ticks</span><b id="timer-ticks">0</b></div>
           </div>
           <div class="device">
-            <div class="device-title">Input device (ports 1, 6)</div>
+            <div class="device-title" data-i18n="dev.input">Input device (ports 1, 6)</div>
             <div class="device-row input-row">
-              <input id="input-text" type="text" placeholder="text for IN A, 1" aria-label="Input text">
-              <button id="btn-send-input" class="btn tiny">Send</button>
+              <input id="input-text" type="text" data-i18n-placeholder="dev.input.placeholder" placeholder="text for IN A, 1" aria-label="Input text">
+              <button id="btn-send-input" class="btn tiny" data-i18n="btn.send">Send</button>
             </div>
-            <div class="device-row"><span>queue</span><code id="input-queue" class="queue-text">(empty)</code></div>
+            <div class="device-row"><span data-i18n="dev.queue">queue</span><code id="input-queue" class="queue-text">(empty)</code></div>
           </div>
         </div>
       </div>
@@ -96,16 +101,16 @@
     <section class="column column-machine">
       <div class="stage" id="stage">
         <div class="die" id="die">
-          <div class="die-label">CISC-16 &middot; 8 bit data path &middot; 16 bit addresses</div>
+          <div class="die-label" data-i18n="die.label">CISC-16 &middot; 8 bit data path &middot; 16 bit addresses</div>
 
           <div class="block control-unit">
-            <div class="block-title">Control unit</div>
+            <div class="block-title" data-i18n="cu.title">Control unit</div>
             <ol class="phases" aria-label="Instruction cycle">
-              <li id="phase-fetch" class="phase" data-phase="fetch"><span class="phase-dot"></span>Fetch</li>
-              <li id="phase-decode" class="phase" data-phase="decode"><span class="phase-dot"></span>Decode</li>
-              <li id="phase-execute" class="phase" data-phase="execute"><span class="phase-dot"></span>Execute</li>
-              <li id="phase-interrupt" class="phase special" data-phase="interrupt"><span class="phase-dot"></span>IRQ</li>
-              <li id="phase-waiting" class="phase special" data-phase="waiting"><span class="phase-dot"></span>Wait</li>
+              <li id="phase-fetch" class="phase" data-phase="fetch"><span class="phase-dot"></span><span data-i18n="phase.fetch">Fetch</span></li>
+              <li id="phase-decode" class="phase" data-phase="decode"><span class="phase-dot"></span><span data-i18n="phase.decode">Decode</span></li>
+              <li id="phase-execute" class="phase" data-phase="execute"><span class="phase-dot"></span><span data-i18n="phase.execute">Execute</span></li>
+              <li id="phase-interrupt" class="phase special" data-phase="interrupt"><span class="phase-dot"></span><span data-i18n="phase.irq">IRQ</span></li>
+              <li id="phase-waiting" class="phase special" data-phase="waiting"><span class="phase-dot"></span><span data-i18n="phase.wait">Wait</span></li>
             </ol>
             <div class="decoded">
               <span class="decoded-label">IR</span>
@@ -114,15 +119,15 @@
             </div>
             <div class="clock">
               <span id="clock-led" class="led amber" aria-hidden="true"></span>
-              <span>clock</span>
-              <span class="clock-stat"><b id="stat-cycles">0</b> cycles</span>
-              <span class="clock-stat"><b id="stat-instructions">0</b> instructions</span>
-              <span class="clock-stat"><b id="stat-last-cycles">0</b> last step</span>
+              <span data-i18n="clock">clock</span>
+              <span class="clock-stat"><b id="stat-cycles">0</b> <span data-i18n="clock.cycles">cycles</span></span>
+              <span class="clock-stat"><b id="stat-instructions">0</b> <span data-i18n="clock.instructions">instructions</span></span>
+              <span class="clock-stat"><b id="stat-last-cycles">0</b> <span data-i18n="clock.last">last step</span></span>
             </div>
           </div>
 
           <div class="block registers">
-            <div class="block-title">Register file</div>
+            <div class="block-title" data-i18n="regs.title">Register file</div>
             <div class="reg-grid" id="registers">
               <span class="reg acc" id="reg-A"><span class="reg-name">A</span><span class="reg-value">00</span></span>
               <span class="reg" id="reg-R0"><span class="reg-name">R0</span><span class="reg-value">00</span></span>
@@ -148,7 +153,7 @@
           </div>
 
           <div class="block alu-block">
-            <div class="block-title">ALU</div>
+            <div class="block-title" data-i18n="alu.title">ALU</div>
             <div class="alu" id="alu">
               <div class="alu-inputs">
                 <span class="alu-port" id="alu-a"><span class="port-label">A</span><span class="port-value">--</span></span>
@@ -157,7 +162,7 @@
               <div class="alu-body">
                 <span id="alu-op" class="alu-op">idle</span>
               </div>
-              <div class="alu-result"><span class="port-label">result</span><span class="port-value" id="alu-result">--</span></div>
+              <div class="alu-result"><span class="port-label" data-i18n="alu.result">result</span><span class="port-value" id="alu-result">--</span></div>
             </div>
             <div class="flags" id="flags" aria-label="Flags">
               <span class="flag" id="flag-z" title="Zero"><span class="led"></span>Z</span>
@@ -169,21 +174,21 @@
           </div>
 
           <div class="block era-block" id="era-block">
-            <div class="block-title">Micro-architecture <span id="era-name" class="era-name"></span></div>
+            <div class="block-title"><span data-i18n="era.title">Micro-architecture</span> <span id="era-name" class="era-name"></span></div>
             <div class="era-body">
               <div class="era-view" id="era-classic">
-                <p class="era-text">Multi-cycle control unit: every bus cycle costs T-states and nothing overlaps. The clock below counts them.</p>
+                <p class="era-text" data-i18n="era.classic.text">Multi-cycle control unit: every bus cycle costs T-states and nothing overlaps. The row below counts the bus cycles.</p>
                 <div class="tstates" id="tstates"></div>
               </div>
               <div class="era-view" id="era-prefetch" hidden>
-                <div class="queue-label">Prefetch queue <span id="queue-address"></span></div>
+                <div class="queue-label"><span data-i18n="era.queue">Prefetch queue</span> <span id="queue-address"></span></div>
                 <div class="queue" id="queue-cells"></div>
               </div>
               <div class="era-view" id="era-pipelined" hidden>
                 <div class="cache-row">
-                  <div class="cache"><div class="cache-label">I-cache</div><div class="cache-lines" id="icache"></div></div>
-                  <div class="cache"><div class="cache-label">D-cache</div><div class="cache-lines" id="dcache"></div></div>
-                  <div class="cache"><div class="cache-label">Branch predictor</div><div class="cache-lines predictor" id="predictor"></div></div>
+                  <div class="cache"><div class="cache-label" data-i18n="era.icache">I-cache</div><div class="cache-lines" id="icache"></div></div>
+                  <div class="cache"><div class="cache-label" data-i18n="era.dcache">D-cache</div><div class="cache-lines" id="dcache"></div></div>
+                  <div class="cache"><div class="cache-label" data-i18n="era.predictor">Branch predictor</div><div class="cache-lines predictor" id="predictor"></div></div>
                 </div>
               </div>
               <div class="era-stats" id="era-stats"></div>
@@ -193,22 +198,22 @@
         </div>
 
         <div class="buses" aria-hidden="true">
-          <div class="bus-lane addr" id="lane-addr"><span class="lane-label">address bus 16</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
-          <div class="bus-lane data" id="lane-data"><span class="lane-label">data bus 8</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
+          <div class="bus-lane addr" id="lane-addr"><span class="lane-label" data-i18n="bus.addr">address bus 16</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
+          <div class="bus-lane data" id="lane-data"><span class="lane-label" data-i18n="bus.data">data bus 8</span><span class="lane-chevrons"><i></i><i></i><i></i><i></i></span></div>
         </div>
 
         <div class="memory-block">
           <div class="block-title memory-title">
             <span class="memory-nav">
-              <button id="btn-page-prev" class="btn tiny ghost" title="Previous page">&#9664;</button>
-              <span>page <b id="memory-page">00</b></span>
-              <button id="btn-page-next" class="btn tiny ghost" title="Next page">&#9654;</button>
-              <button id="btn-page-ip" class="btn tiny ghost" title="Show the page IP points to">IP</button>
-              <button id="btn-page-sp" class="btn tiny ghost" title="Show the page SP points to">SP</button>
-              <label class="follow" title="Switch the page to every address the processor touches"><input id="follow-bus" type="checkbox" checked> follow</label>
+              <button id="btn-page-prev" class="btn tiny ghost" data-i18n-title="tip.pagePrev" title="Previous page">&#9664;</button>
+              <span><span data-i18n="mem.page">page</span> <b id="memory-page">00</b></span>
+              <button id="btn-page-next" class="btn tiny ghost" data-i18n-title="tip.pageNext" title="Next page">&#9654;</button>
+              <button id="btn-page-ip" class="btn tiny ghost" data-i18n-title="tip.pageIp" title="Show the page IP points to">IP</button>
+              <button id="btn-page-sp" class="btn tiny ghost" data-i18n-title="tip.pageSp" title="Show the page SP points to">SP</button>
+              <label class="follow" data-i18n-title="tip.follow" title="Switch the page to every address the processor touches"><input id="follow-bus" type="checkbox" checked> <span data-i18n="mem.follow">follow</span></label>
             </span>
             <span class="legend">
-              <i class="sw code"></i>code <i class="sw data"></i>data <i class="sw stack"></i>stack <i class="sw vector"></i>vectors <i class="sw current"></i>IP
+              <i class="sw code"></i><span data-i18n="legend.code">code</span> <i class="sw data"></i><span data-i18n="legend.data">data</span> <i class="sw stack"></i><span data-i18n="legend.stack">stack</span> <i class="sw vector"></i><span data-i18n="legend.vectors">vectors</span> <i class="sw current"></i><span data-i18n="legend.ip">IP</span>
             </span>
           </div>
           <div class="memory" id="memory"></div>
@@ -226,11 +231,11 @@
 
       <div class="io">
         <div class="panel panel-console">
-          <div class="panel-head"><h2>Output ports</h2><span class="panel-meta">port 0 = numbers, port 1 = characters</span></div>
+          <div class="panel-head"><h2 data-i18n="panel.output">Output ports</h2><span class="panel-meta" data-i18n="output.hint">port 0 = numbers, port 1 = characters</span></div>
           <div class="console" id="console"><span class="console-text" id="console-text"></span><span class="cursor"></span></div>
         </div>
         <div class="panel panel-trace">
-          <div class="panel-head"><h2>Execution trace</h2><button id="btn-clear-trace" class="btn tiny ghost">clear</button></div>
+          <div class="panel-head"><h2 data-i18n="panel.trace">Execution trace</h2><button id="btn-clear-trace" class="btn tiny ghost" data-i18n="btn.clear">clear</button></div>
           <div class="trace" id="trace"></div>
         </div>
       </div>
@@ -241,30 +246,35 @@
     <span id="status-badge" class="badge ready">Ready</span>
     <span id="status-text" class="status-text">Load a sample or write a program, then press Run.</span>
     <span class="status-stats">
-      <span>IP <b id="stat-ip">0000</b></span>
-      <span>SP <b id="stat-sp">FFF0</b></span>
-      <span>Phase <b id="stat-phase">idle</b></span>
-      <span>Era <b id="stat-era">1975</b></span>
-      <span>Engine <b id="stat-engine">JavaScript</b></span>
+      <span><span data-i18n="status.ip">IP</span> <b id="stat-ip">0000</b></span>
+      <span><span data-i18n="status.sp">SP</span> <b id="stat-sp">FFF0</b></span>
+      <span><span data-i18n="status.phase">Phase</span> <b id="stat-phase">idle</b></span>
+      <span><span data-i18n="status.era">Era</span> <b id="stat-era">1975</b></span>
+      <span><span data-i18n="status.engine">Engine</span> <b id="stat-engine">JavaScript</b></span>
     </span>
   </footer>
 
   <dialog id="reference" class="reference">
     <div class="reference-head">
-      <h2>CISC-16 instruction set</h2>
-      <button id="btn-close-reference" class="btn ghost">Close</button>
+      <h2 data-i18n="ref.title">CISC-16 instruction set</h2>
+      <button id="btn-close-reference" class="btn ghost" data-i18n="btn.close">Close</button>
     </div>
-    <p class="reference-intro">
-      Registers: <code>A</code> and <code>R0</code>..<code>R7</code> (8 bit), <code>SI</code>, <code>DI</code>, <code>BP</code>, <code>SP</code> (16 bit), <code>FLAGS</code> = Z C N V I.
-      Operands: <code>imm8</code> / <code>imm16</code> (number, <code>'c'</code> or label), <code>[addr]</code> direct, <code>[Rn]</code> zero page indirect,
-      <code>[addr+Rn]</code> indexed, <code>[SI]</code> register indirect, <code>[BP+disp]</code> / <code>[BP-disp]</code> based.
-      Directives: <code>.org addr</code>, <code>.db v, "text"</code>, <code>.dw word, label</code>, <code>.ds count</code>, <code>.equ NAME, value</code>.
-      Ports: <code>OUT 0</code> number, <code>OUT 1</code> character, <code>OUT 2/3</code> timer period, <code>OUT 4</code> timer control,
-      <code>IN A, 1</code> input, <code>IN A, 6</code> input status. Interrupt vectors live at <code>0xFFF0</code> + 2 &times; IRQ, R6 is the REP count, R7 the high byte of MUL / DIV.
-    </p>
+    <p class="reference-intro" id="reference-intro" data-i18n-html="ref.intro"></p>
     <div id="reference-table" class="reference-table"></div>
   </dialog>
 
+  <dialog id="guide" class="reference guide">
+    <div class="reference-head">
+      <h2 data-i18n="guide.title">Guide</h2>
+      <button id="btn-close-guide" class="btn ghost" data-i18n="btn.close">Close</button>
+    </div>
+    <div class="guide-body">
+      <nav id="guide-nav" class="guide-nav"></nav>
+      <div id="guide-content" class="guide-content"></div>
+    </div>
+  </dialog>
+
+  <script src="js/i18n.js"></script>
   <script src="js/isa.js"></script>
   <script src="js/timing.js"></script>
   <script src="js/cpu.js"></script>

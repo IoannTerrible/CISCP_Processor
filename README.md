@@ -320,7 +320,8 @@ What the page shows:
 - **The die**: control unit with the fetch / decode / execute phases plus the interrupt and wait states, the decoded instruction, the clock, the register file with the 16 bit address registers, `MAR` / `MDR`, an ALU that lights up with its operands and result, the flag LEDs, and a **micro-architecture block** that changes with the era: T-states in 1975, the prefetch queue in 1985, both caches and the branch predictor in 1995.
 - **Buses and memory**: packets travel over the 16 bit address bus and the 8 bit data bus between the processor and a 256 byte window of memory. The window follows every access by default (code at the bottom, the stack and the vector table at the top of the address space) and can be paged by hand. Code, data, the stack, the vector table and the current instruction are color coded; reads and writes flash.
 - **Output ports and execution trace**, including interrupt acknowledges and idle steps, plus a status bar with the processor state, `IP`, `SP`, the phase, the era and the engine.
-- Controls: *Program*, *Era*, *Assemble* (Ctrl+Enter), *Run / Pause* (F5), *Step* (F8), *Reset*, a speed slider from a slow crawl to a turbo mode without animation, the instruction set reference and a light / dark theme. `?program=sort&era=Pipelined1995` in the URL preselects a sample and an era.
+- Controls: *Program*, *Era*, *Assemble* (Ctrl+Enter), *Run / Pause* (F5), *Step* (F8), *Reset*, a speed slider from a slow crawl to a turbo mode without animation, the instruction set reference, a built-in guide and a light / dark theme. `?program=sort&era=Pipelined1995` in the URL preselects a sample and an era.
+- **Languages**: the interface, the instruction reference and the guide exist in English and Russian. The EN / RU switch sits in the top right corner; `?lang=ru` selects the language through the URL and the choice is remembered in the browser.
 
 ### Web API
 
@@ -404,6 +405,9 @@ docs/visualizer.png            screenshot
 
 ## Changelog 📝
 
+- **0_018** - Russian interface, instruction reference and sample names; a built-in guide (stand, screen, architecture, assembly language, instruction groups, eras, devices, memory window) in English and Russian; EN / RU switch.
+- **0_017** - Styled page scrollbar.
+- **0_016** - Styled scrollbars in the panels.
 - **0_015** - GitHub Pages workflow for the visualizer.
 - **0_014** - README for version 0.20.
 - **0_013** - Visualizer for CISC-16: era selector with the micro-architecture block (T-states, prefetch queue, caches and branch predictor), 16 bit registers, paged 64 KB memory window, devices panel with interrupt lines, timer and input device, interrupt and wait steps in the trace; web host API with micro-architecture selection and input; JavaScript mirror of the timing models.

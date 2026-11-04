@@ -7,7 +7,8 @@
 (function () {
   'use strict';
 
-  const { ISA, CPU, Assembler, SAMPLES, Timing } = window.CISC;
+  const { ISA, CPU, Assembler, SAMPLES, Timing, I18N } = window.CISC;
+  const t = (key, params) => I18N.t(key, params);
   const $ = (id) => document.getElementById(id);
   const hex2 = ISA.hex2;
   const hex4 = ISA.hex4;
@@ -135,7 +136,6 @@
   // ----------------------------------------------------------------- state ----
 
   const DELAYS = [0, 520, 340, 220, 140, 90, 55, 30, 14, 5, 0];
-  const SPEED_LABELS = ['', 'crawl', 'very slow', 'slow', 'relaxed', 'normal', 'brisk', 'fast', 'faster', 'blazing', 'turbo'];
 
   const ui = {
     engine: new LocalEngine(),
@@ -161,6 +161,7 @@
     currentRange: null,
     inputQueue: '',
     rowByAddress: new Map(),
+    lastStatus: { kind: 'ready', key: 'status.initial', params: null, text: null },
   };
 
   const el = {
@@ -186,6 +187,7 @@
     eraStats: $('era-stats'), eraEvent: $('era-event'),
     irqLeds: $('irq-leds'), flagIDevice: $('flag-i-device'), timerPeriod: $('timer-period'), timerTicks: $('timer-ticks'), timerLed: $('timer-led'), timerState: $('timer-state'),
     inputText: $('input-text'), btnSendInput: $('btn-send-input'), inputQueue: $('input-queue'),
+    btnGuide: $('btn-guide'), btnCloseGuide: $('btn-close-guide'), guide: $('guide'), guideNav: $('guide-nav'), guideContent: $('guide-content'),
   };
 
   const regEl = (name) => $('reg-' + name);
@@ -229,35 +231,41 @@
   }
 
   function buildSampleSelect() {
+    const selected = el.sampleSelect.value;
+    el.sampleSelect.innerHTML = '';
     for (const sample of SAMPLES) {
       const option = document.createElement('option');
       option.value = sample.id;
-      option.textContent = sample.name;
-      option.title = sample.description;
+      option.textContent = I18N.sampleName(sample);
+      option.title = I18N.sampleDescription(sample);
       el.sampleSelect.appendChild(option);
     }
     const custom = document.createElement('option');
     custom.value = '';
-    custom.textContent = 'Custom program';
+    custom.textContent = t('sample.custom');
     el.sampleSelect.appendChild(custom);
+    el.sampleSelect.value = selected;
   }
 
   function buildReference() {
     const families = [
-      ['Control and interrupts', (i) => i.opcode < 0x10], ['Data movement', (i) => i.opcode >= 0x10 && i.opcode < 0x30],
-      ['Stack and frames', (i) => i.opcode >= 0x30 && i.opcode < 0x40], ['Arithmetic', (i) => i.opcode >= 0x40 && i.opcode < 0x60],
-      ['Logic and shifts', (i) => i.opcode >= 0x60 && i.opcode < 0x70], ['Control flow', (i) => i.opcode >= 0x70 && i.opcode < 0x80],
-      ['Flags', (i) => i.opcode >= 0x80 && i.opcode < 0x90], ['String operations', (i) => i.opcode >= 0x90 && i.opcode < 0xA0],
-      ['Input / output', (i) => i.opcode >= 0xF0],
+      ['family.control', (i) => i.opcode < 0x10], ['family.move', (i) => i.opcode >= 0x10 && i.opcode < 0x30],
+      ['family.stack', (i) => i.opcode >= 0x30 && i.opcode < 0x40], ['family.arith', (i) => i.opcode >= 0x40 && i.opcode < 0x60],
+      ['family.logic', (i) => i.opcode >= 0x60 && i.opcode < 0x70], ['family.flow', (i) => i.opcode >= 0x70 && i.opcode < 0x80],
+      ['family.flags', (i) => i.opcode >= 0x80 && i.opcode < 0x90], ['family.string', (i) => i.opcode >= 0x90 && i.opcode < 0xA0],
+      ['family.io', (i) => i.opcode >= 0xF0],
     ];
+    el.referenceTable.innerHTML = '';
     const table = document.createElement('table');
-    table.innerHTML = '<thead><tr><th>Op</th><th>Syntax</th><th>Bytes</th><th>Description</th></tr></thead>';
+    table.innerHTML = '<thead><tr><th></th><th></th><th></th><th></th></tr></thead>';
+    const heads = table.querySelectorAll('th');
+    heads[0].textContent = t('ref.op'); heads[1].textContent = t('ref.syntax'); heads[2].textContent = t('ref.bytes'); heads[3].textContent = t('ref.description');
     const body = document.createElement('tbody');
     for (const [name, filter] of families) {
       const head = document.createElement('tr');
       head.className = 'family';
       head.innerHTML = '<td colspan="4"></td>';
-      head.firstChild.textContent = name;
+      head.firstChild.textContent = t(name);
       body.appendChild(head);
       for (const i of ISA.all.filter(filter)) {
         const row = document.createElement('tr');
@@ -265,7 +273,7 @@
         row.children[0].textContent = hex2(i.opcode);
         row.children[1].textContent = i.syntax.template;
         row.children[2].textContent = i.length;
-        row.children[3].textContent = i.description;
+        row.children[3].textContent = I18N.instructionDescription(i);
         body.appendChild(row);
       }
     }
@@ -319,7 +327,7 @@
     el.error.hidden = false;
     el.error.textContent = error.message;
     updateGutter(error.line);
-    setStatus('error', error.message);
+    setStatusText('error', error.message);
   }
 
   function clearError() {
@@ -339,16 +347,16 @@
       const { program, state, timing } = await ui.engine.load(el.source.value, loadOptions());
       ui.program = program;
       ui.modified = false;
-      el.stats.textContent = program.length + ' bytes, entry 0x' + hex4(program.entryPoint) + ', ' + Object.keys(program.symbols).length + ' symbols';
+      el.stats.textContent = t('stats.program', { bytes: program.length, entry: hex4(program.entryPoint), symbols: Object.keys(program.symbols).length });
       renderListing(program);
       loadMemoryImage(program);
       resetMachineView(state, timing);
-      setStatus('ready', 'Program assembled and loaded. Press Run or Step.');
+      setStatusKey('ready', 'status.assembled');
       return true;
     } catch (error) {
       ui.program = null;
       if (error.line) showError(error);
-      else setStatus('error', error.message);
+      else setStatusText('error', error.message);
       return false;
     } finally {
       ui.busy = false;
@@ -390,7 +398,7 @@
     el.decodedText.textContent = '-';
     el.aluA.textContent = '--';
     el.aluB.textContent = '--';
-    el.aluOp.textContent = 'idle';
+    el.aluOp.textContent = t('alu.idle');
     el.aluResult.textContent = '--';
     el.die.classList.remove('halted', 'fault', 'running');
     el.consoleText.textContent = '';
@@ -579,8 +587,8 @@
     el.timerPeriod.textContent = state.timerPeriod;
     el.timerTicks.textContent = state.timerTicks;
     el.timerLed.classList.toggle('on', state.timerEnabled);
-    el.timerState.textContent = state.timerEnabled ? 'running' : 'off';
-    el.inputQueue.textContent = ui.inputQueue.length ? JSON.stringify(ui.inputQueue) : '(empty)';
+    el.timerState.textContent = state.timerEnabled ? t('dev.running') : t('dev.off');
+    el.inputQueue.textContent = ui.inputQueue.length ? JSON.stringify(ui.inputQueue) : t('dev.empty');
     void animate;
   }
 
@@ -590,7 +598,7 @@
     el.statLastCycles.textContent = lastCycles;
     el.statIp.textContent = hex4(state.ip);
     el.statSp.textContent = hex4(state.sp);
-    el.statPhase.textContent = state.phase;
+    el.statPhase.textContent = t('phase.name.' + state.phase);
     el.statEra.textContent = ERA_LABEL[ui.microarchitecture] || ui.microarchitecture;
   }
 
@@ -604,14 +612,14 @@
     }
     $('phase-interrupt').classList.toggle('active', phase === 'interrupt');
     $('phase-waiting').classList.toggle('active', phase === 'waiting');
-    el.statPhase.textContent = phase;
+    el.statPhase.textContent = t('phase.name.' + phase);
   }
 
   /** Draws the micro-architecture block from a timing snapshot. */
   function renderEra(timing, event) {
     if (!timing) return;
     ui.timing = timing;
-    el.eraName.textContent = timing.name;
+    el.eraName.textContent = t('era.name.' + timing.kind);
     el.eraClassic.hidden = timing.kind !== 'Classic1975';
     el.eraPrefetch.hidden = timing.kind !== 'Prefetch1985';
     el.eraPipelined.hidden = timing.kind !== 'Pipelined1995';
@@ -621,7 +629,7 @@
       const item = document.createElement('span');
       const b = document.createElement('b');
       b.textContent = stats[key];
-      item.append(key + ' ', b);
+      item.append(I18N.statName(key) + ' ', b);
       el.eraStats.appendChild(item);
     }
     if (timing.kind === 'Classic1975') {
@@ -631,7 +639,7 @@
       for (let i = 0; i < shown; i++) { const t = document.createElement('i'); t.className = 'bus'; el.tstates.appendChild(t); }
       if (bus > shown) { const more = document.createElement('span'); more.className = 'era-text'; more.textContent = ' +' + (bus - shown); el.tstates.appendChild(more); }
     } else if (timing.kind === 'Prefetch1985') {
-      el.queueAddress.textContent = timing.prefetchQueueLength ? '0x' + hex4(timing.prefetchQueueAddress) + ' .. ' + hex4(timing.prefetchQueueAddress + timing.prefetchQueueLength - 1) : '(empty)';
+      el.queueAddress.textContent = timing.prefetchQueueLength ? '0x' + hex4(timing.prefetchQueueAddress) + ' .. ' + hex4(timing.prefetchQueueAddress + timing.prefetchQueueLength - 1) : t('era.queue.empty');
       const cells = el.queueCells.children;
       for (let i = 0; i < cells.length; i++) {
         const full = i < timing.prefetchQueueLength;
@@ -672,10 +680,27 @@
     element.classList.add(className);
   }
 
-  function setStatus(kind, text) {
+  function setStatusText(kind, text) {
+    ui.lastStatus = { kind, key: null, params: null, text };
     el.statusBadge.className = 'badge ' + kind;
-    el.statusBadge.textContent = kind === 'breakpoint' ? 'Breakpoint' : kind.charAt(0).toUpperCase() + kind.slice(1);
+    el.statusBadge.textContent = t('badge.' + kind);
     el.statusText.textContent = text;
+  }
+
+  function setStatusKey(kind, key, params) {
+    ui.lastStatus = { kind, key, params: params || null, text: null };
+    el.statusBadge.className = 'badge ' + kind;
+    el.statusBadge.textContent = t('badge.' + kind);
+    el.statusText.textContent = t(key, params);
+  }
+
+  function refreshStatus() {
+    const s = ui.lastStatus;
+    if (s.key) setStatusKey(s.kind, s.key, s.params); else setStatusText(s.kind, s.text);
+  }
+
+  function faultName(state) {
+    return 'i18n:fault.' + state.fault;
   }
 
   function appendOutput(port, value) {
@@ -693,7 +718,7 @@
     row.children[0].textContent = hex4(trace.address);
     row.children[1].textContent = trace.bytes.map(hex2).join(' ');
     row.children[2].textContent = trace.state.fault ? trace.disassembly + '  ' + trace.state.fault : trace.disassembly;
-    row.children[3].textContent = trace.cycles ? trace.cycles + ' cyc' : '';
+    row.children[3].textContent = trace.cycles ? trace.cycles + ' ' + t('trace.cyc') : '';
     el.trace.appendChild(row);
     ui.traceRows++;
     while (ui.traceRows > 400) { el.trace.removeChild(el.trace.firstChild); ui.traceRows--; }
@@ -842,7 +867,7 @@
         break;
       case 'input':
         if ((op.address === 0 || op.address === 1) && ui.inputQueue.length && op.value !== 0) ui.inputQueue = ui.inputQueue.slice(1);
-        el.inputQueue.textContent = ui.inputQueue.length ? JSON.stringify(ui.inputQueue) : '(empty)';
+        el.inputQueue.textContent = ui.inputQueue.length ? JSON.stringify(ui.inputQueue) : t('dev.empty');
         restartAnimation(el.inputText.closest('.device'), 'flash');
         if (d) await sleep(d * .6);
         break;
@@ -861,7 +886,7 @@
         break;
       case 'timing':
         flashEraFor(op);
-        el.eraEvent.textContent = op.text + (op.value ? '  (+' + op.value + ' cycles)' : '');
+        el.eraEvent.textContent = I18N.eventText(op) + (op.value ? '  (+' + op.value + ')' : '');
         restartAnimation(el.eraEvent, 'flash');
         if (d && op.value) await sleep(d * .5);
         break;
@@ -914,11 +939,11 @@
     el.clockLed.classList.remove('on');
     if (trace.state.fault) {
       setPhase('halted');
-      setStatus('fault', trace.state.fault + ': ' + (trace.state.faultMessage || '') + ' - reset to try again.');
+      setStatusKey('fault', 'status.fault', { fault: faultName(trace.state), message: trace.state.faultMessage || '' });
     } else if (trace.state.halted) {
       setPhase('halted');
       markCurrentCells(0, 0);
-      setStatus('halted', 'Halted after ' + trace.state.instructions + ' instructions and ' + trace.state.cycles + ' clock cycles.');
+      setStatusKey('halted', 'status.halted', { n: trace.state.instructions, c: trace.state.cycles });
     } else if (trace.state.waiting) {
       setPhase('waiting');
     }
@@ -937,8 +962,8 @@
     highlightListing(last.address, last.state.halted ? -1 : last.state.ip);
     markCurrentCells(last.address, last.bytes.length);
     setPhase(last.state.phase);
-    if (last.state.fault) setStatus('fault', last.state.fault + ': ' + (last.state.faultMessage || '') + ' - reset to try again.');
-    else if (last.state.halted) { markCurrentCells(0, 0); setStatus('halted', 'Halted after ' + last.state.instructions + ' instructions and ' + last.state.cycles + ' clock cycles.'); }
+    if (last.state.fault) setStatusKey('fault', 'status.fault', { fault: faultName(last.state), message: last.state.faultMessage || '' });
+    else if (last.state.halted) { markCurrentCells(0, 0); setStatusKey('halted', 'status.halted', { n: last.state.instructions, c: last.state.cycles }); }
   }
 
   // -------------------------------------------------------------- control ----
@@ -949,7 +974,7 @@
   }
 
   function updateButtons() {
-    el.btnRun.textContent = ui.running ? 'Pause' : 'Run';
+    el.btnRun.textContent = ui.running ? t('btn.pause') : t('btn.run');
     el.btnRun.classList.toggle('pause', ui.running);
     el.btnStep.disabled = ui.running;
     el.btnAssemble.disabled = ui.running;
@@ -965,7 +990,7 @@
     let first = true;
     while (ui.running && !ui.engine.halted) {
       if (!first && !ui.engine.busy && ui.breakpoints.has(ui.engine.ip)) {
-        setStatus('breakpoint', 'Stopped at breakpoint 0x' + hex4(ui.engine.ip) + '. Press Run to continue or Step.');
+        setStatusKey('breakpoint', 'status.breakpoint', { ip: hex4(ui.engine.ip) });
         break;
       }
       first = false;
@@ -974,7 +999,7 @@
         try {
           traces = await ui.engine.batch(512, ui.breakpoints);
         } catch (error) {
-          setStatus('error', error.message);
+          setStatusText('error', error.message);
           break;
         }
         for (const trace of traces) applyTraceQuietly(trace);
@@ -988,7 +1013,7 @@
         try {
           trace = await ui.engine.step();
         } catch (error) {
-          setStatus('error', error.message);
+          setStatusText('error', error.message);
           break;
         }
         await playStep(trace);
@@ -997,7 +1022,7 @@
     ui.running = false;
     updateButtons();
     if (!ui.engine.halted && el.statusBadge.classList.contains('running')) {
-      setStatus('paused', 'Paused at 0x' + hex4(ui.engine.ip) + '. Press Run to continue or Step.');
+      setStatusKey('paused', 'status.paused', { ip: hex4(ui.engine.ip) });
     }
   }
 
@@ -1008,7 +1033,7 @@
     if (ui.engine.halted) await reloadProgram();
     ui.running = true;
     updateButtons();
-    setStatus('running', 'Running ' + (delay() === 0 ? 'at full speed' : 'with animation') + ' on the ' + ERA_LABEL[ui.microarchitecture] + ' micro-architecture. Press Pause (F5) to stop.');
+    setStatusKey('running', 'status.running', { mode: delay() === 0 ? 'i18n:mode.full' : 'i18n:mode.animated', era: ERA_LABEL[ui.microarchitecture] });
     ui.runPromise = runLoop();
     await ui.runPromise;
     ui.runPromise = null;
@@ -1018,18 +1043,18 @@
     if (ui.running || ui.busy) return;
     if (!(await ensureProgram())) return;
     if (ui.engine.halted) {
-      setStatus('halted', 'The processor is halted. Press Reset to run the program again.');
+      setStatusKey('halted', 'status.halted.reset');
       return;
     }
     ui.busy = true;
     el.btnStep.disabled = true;
     try {
-      setStatus('running', 'Executing one step.');
+      setStatusKey('running', 'status.stepping');
       const trace = await ui.engine.step();
       await playStep(trace);
-      if (!trace.state.halted) setStatus('paused', 'Next step at 0x' + hex4(trace.state.ip) + (trace.state.waiting ? ' (waiting for an interrupt)' : '') + '.');
+      if (!trace.state.halted) setStatusKey('paused', 'status.next', { ip: hex4(trace.state.ip), wait: trace.state.waiting ? 'i18n:status.next.wait' : '' });
     } catch (error) {
-      setStatus('error', error.message);
+      setStatusText('error', error.message);
     } finally {
       ui.busy = false;
       el.btnStep.disabled = false;
@@ -1041,9 +1066,9 @@
     if (!ui.program || ui.modified) {
       if (!(await assemble())) return;
     } else {
-      try { await reloadProgram(); } catch (error) { setStatus('error', error.message); return; }
+      try { await reloadProgram(); } catch (error) { setStatusText('error', error.message); return; }
     }
-    setStatus('ready', 'Processor reset. Press Run or Step.');
+    setStatusKey('ready', 'status.reset');
     updateButtons();
   }
 
@@ -1051,7 +1076,7 @@
     await stopRunning();
     ui.engine = ui.engines[id] || ui.engines.js;
     el.engineSelect.value = ui.engine.id;
-    el.statEngine.textContent = ui.engine.name;
+    el.statEngine.textContent = engineName();
     try { localStorage.setItem('cisc16.engine', ui.engine.id); } catch (e) { /* storage unavailable */ }
     ui.modified = true;
     await assemble();
@@ -1074,11 +1099,11 @@
     try {
       const queued = await ui.engine.sendInput(text);
       ui.inputQueue = queued;
-      el.inputQueue.textContent = ui.inputQueue.length ? JSON.stringify(ui.inputQueue) : '(empty)';
+      el.inputQueue.textContent = ui.inputQueue.length ? JSON.stringify(ui.inputQueue) : t('dev.empty');
       restartAnimation(el.inputText.closest('.device'), 'flash');
-      setStatus(el.statusBadge.className.replace('badge ', ''), 'Queued ' + text.length + ' byte(s) into the input device.');
+      setStatusKey(ui.lastStatus.kind, 'status.queued', { n: text.length });
     } catch (error) {
-      setStatus('error', error.message);
+      setStatusText('error', error.message);
     }
   }
 
@@ -1091,7 +1116,7 @@
     ui.engines.dotnet = new RemoteEngine(base, info);
     const option = document.createElement('option');
     option.value = 'dotnet';
-    option.textContent = '.NET server';
+    option.textContent = t('engine.dotnet');
     el.engineSelect.appendChild(option);
     el.engineField.hidden = false;
     let preferred = 'dotnet';
@@ -1111,7 +1136,7 @@
 
   function setSpeed(value) {
     ui.speed = Number(value);
-    el.speedLabel.value = SPEED_LABELS[ui.speed];
+    el.speedLabel.value = t('speed.' + ui.speed);
     try { localStorage.setItem('cisc16.speed', String(ui.speed)); } catch (e) { /* storage unavailable */ }
   }
 
@@ -1120,20 +1145,69 @@
     try { localStorage.setItem('cisc16.theme', theme); } catch (e) { /* storage unavailable */ }
   }
 
+  // ------------------------------------------------------------- language ----
+
+  function engineName() {
+    return ui.engine.id === 'js' ? t('engine.name.js') : ui.engine.name;
+  }
+
+  function buildGuide() {
+    el.guideNav.innerHTML = '';
+    el.guideContent.innerHTML = '';
+    I18N.guide().forEach((section, index) => {
+      const id = 'guide-section-' + index;
+      const link = document.createElement('a');
+      link.href = '#' + id;
+      link.textContent = section.h;
+      link.addEventListener('click', (event) => { event.preventDefault(); $(id).scrollIntoView({ block: 'start' }); });
+      el.guideNav.appendChild(link);
+      const block = document.createElement('section');
+      block.id = id;
+      const heading = document.createElement('h3');
+      heading.textContent = section.h;
+      block.appendChild(heading);
+      block.insertAdjacentHTML('beforeend', section.html);
+      el.guideContent.appendChild(block);
+    });
+  }
+
+  /** Switches every text on the page to `lang` and re-renders the parts built by script. */
+  function applyLanguage(lang) {
+    I18N.language = lang;
+    lang = I18N.language;
+    document.documentElement.lang = lang;
+    document.title = t('app.title');
+    for (const node of document.querySelectorAll('[data-i18n]')) node.textContent = t(node.dataset.i18n);
+    for (const node of document.querySelectorAll('[data-i18n-title]')) node.title = t(node.dataset.i18nTitle);
+    for (const node of document.querySelectorAll('[data-i18n-placeholder]')) node.placeholder = t(node.dataset.i18nPlaceholder);
+    for (const node of document.querySelectorAll('[data-i18n-html]')) node.innerHTML = t(node.dataset.i18nHtml);
+    for (const button of document.querySelectorAll('.lang-switch button')) button.classList.toggle('active', button.dataset.lang === lang);
+    buildSampleSelect();
+    buildReference();
+    buildGuide();
+    setSpeed(ui.speed);
+    updateButtons();
+    refreshStatus();
+    el.statEngine.textContent = engineName();
+    for (const option of el.engineSelect.options) option.textContent = t(option.value === 'js' ? 'engine.js' : 'engine.dotnet');
+    if (ui.state) { renderStats(ui.state, Number(el.statLastCycles.textContent) || 0); renderDevices(ui.state, false); }
+    if (ui.timing) renderEra(ui.timing, null);
+    if (ui.modified) el.stats.textContent = t('stats.modified');
+    else if (ui.program) el.stats.textContent = t('stats.program', { bytes: ui.program.length, entry: hex4(ui.program.entryPoint), symbols: Object.keys(ui.program.symbols).length });
+    try { localStorage.setItem('cisc16.lang', lang); } catch (e) { /* storage unavailable */ }
+  }
+
   // ------------------------------------------------------------------ init ----
 
   function init() {
     buildMemoryGrid();
-    buildSampleSelect();
-    buildReference();
     buildEraWidgets();
     ui.engines.js = ui.engine;
     const jsOption = document.createElement('option');
     jsOption.value = 'js';
-    jsOption.textContent = 'JavaScript (browser)';
+    jsOption.textContent = t('engine.js');
     el.engineSelect.appendChild(jsOption);
     el.engineSelect.value = 'js';
-    el.statEngine.textContent = ui.engine.name;
 
     let theme = 'dark';
     let speed = 5;
@@ -1145,8 +1219,11 @@
     } catch (e) { /* storage unavailable */ }
     applyTheme(theme);
     el.speed.value = speed;
-    setSpeed(speed);
     const params = new URLSearchParams(location.search);
+    let lang = (navigator.language || 'en').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+    try { lang = localStorage.getItem('cisc16.lang') || lang; } catch (e) { /* storage unavailable */ }
+    if (I18N.languages.includes(params.get('lang'))) lang = params.get('lang');
+    applyLanguage(lang);
     if (['Classic1975', 'Prefetch1985', 'Pipelined1995'].includes(params.get('era'))) arch = params.get('era');
     if (!Timing.MICROARCHITECTURES.some((m) => m.id === arch)) arch = 'Classic1975';
     ui.microarchitecture = arch;
@@ -1161,6 +1238,9 @@
     el.btnClearTrace.addEventListener('click', () => { el.trace.innerHTML = ''; ui.traceRows = 0; });
     el.btnReference.addEventListener('click', () => el.reference.showModal());
     el.btnCloseReference.addEventListener('click', () => el.reference.close());
+    el.btnGuide.addEventListener('click', () => { el.guide.showModal(); el.guideContent.scrollTop = 0; });
+    el.btnCloseGuide.addEventListener('click', () => el.guide.close());
+    for (const button of document.querySelectorAll('.lang-switch button')) button.addEventListener('click', () => applyLanguage(button.dataset.lang));
     el.btnTheme.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'));
     el.speed.addEventListener('input', () => setSpeed(el.speed.value));
     el.btnSendInput.addEventListener('click', sendInput);
@@ -1178,7 +1258,7 @@
     el.source.addEventListener('input', () => {
       ui.modified = true;
       el.sampleSelect.value = '';
-      el.stats.textContent = 'modified - assemble to load';
+      el.stats.textContent = t('stats.modified');
       if (!el.error.hidden) clearError();
       else updateGutter();
     });
