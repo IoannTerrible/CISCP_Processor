@@ -8,7 +8,7 @@ using static CISCProcessorWeb.Dtos;
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-    WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot"),
+    WebRootPath = ResolveWebRoot(),
 });
 builder.Services.AddSingleton<SessionStore>();
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
@@ -110,4 +110,19 @@ api.MapPost("/sessions/{id}/reset", (string id, SessionStore store) =>
 api.MapDelete("/sessions/{id}", (string id, SessionStore store) =>
     store.Remove(id) ? Results.NoContent() : Results.NotFound(new { message = "Unknown session." }));
 
+app.Logger.LogInformation("Serving the visualizer from {WebRoot}", app.Environment.WebRootPath);
 app.Run();
+
+// When the host runs from the source tree (dotnet run, Visual Studio) the repository's web/ folder is served
+// directly, so edits to the page show up without a rebuild. Published builds carry a copy in wwwroot/.
+static string ResolveWebRoot()
+{
+    DirectoryInfo? directory = new(AppContext.BaseDirectory);
+    for (int level = 0; level < 8 && directory is not null; level++, directory = directory.Parent)
+    {
+        string candidate = Path.Combine(directory.FullName, "web");
+        if (File.Exists(Path.Combine(candidate, "index.html")) && File.Exists(Path.Combine(candidate, "js", "app.js")))
+            return candidate;
+    }
+    return Path.Combine(AppContext.BaseDirectory, "wwwroot");
+}

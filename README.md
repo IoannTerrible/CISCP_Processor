@@ -312,6 +312,7 @@ docs/visualizer.png            screenshot
 
 ## Changelog 📝
 
+- **0_011** - Web host: static web assets disabled and the web root resolved at start-up, so `dotnet run` works from the source tree (the page is served straight from `web/`).
 - **0_010** - README for version 0.10.
 - **0_009** - Web visualizer (`web/`) with animated buses, ALU, registers, memory map, breakpoints and samples; `CISCProcessorWeb` ASP.NET Core host and JSON API; JavaScript mirror of the core.
 - **0_008** - New CISC-8 core: 8 bit registers and memory, hardware stack in memory, Z C N V flags, fetch - decode - execute cycle with cycle counts and micro-operation tracing, 74 instruction opcode table with five addressing modes, two pass assembler, disassembler, faults, sample programs, rewritten console demo (file / sample / interactive modes, traces, memory dump) and an xunit test suite. Replaces the previous `StackProcessor` and the five stand-alone instruction classes.

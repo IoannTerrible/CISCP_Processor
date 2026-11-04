@@ -7,6 +7,9 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>CISCProcessorWeb</RootNamespace>
     <Description>Web host for the CISC-8 visualizer: serves the page from ../../web and runs programs on the .NET core.</Description>
+    <!-- The page is not a static web asset of this project (it lives in ../../web), so the SDK must not
+         look for a wwwroot folder next to the csproj in Development. -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,5 +20,10 @@
     <!-- The visualizer lives in the repository root (web/) so it can also be opened directly or hosted statically. -->
     <Content Include="..\..\web\**\*" Link="wwwroot\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- A manifest left behind by an earlier build with static web assets enabled would still be loaded. -->
+  <Target Name="RemoveStaleStaticWebAssetsManifest" AfterTargets="Build">
+    <Delete Files="$(OutDir)$(AssemblyName).staticwebassets.runtime.json" />
+  </Target>
 
 </Project>
