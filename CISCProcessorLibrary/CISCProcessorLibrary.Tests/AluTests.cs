@@ -138,20 +138,34 @@ public class AluTests
     }
 
     [Fact]
-    public void Mul_KeepsTheLowByteAndFlagsOverflow()
+    public void Mul_ProducesA16BitProductInR7AndA()
     {
-        CISCProcessor cpu = Run("MOV A, 16\nMOV R0, 16\nMUL R0\nHLT");
+        CISCProcessor cpu = Run("MOV A, 200\nMOV R0, 3\nMUL R0\nHLT");
 
-        Assert.Equal(0, cpu.Accumulator);
+        Assert.Equal(600 & 0xFF, cpu.Accumulator);
+        Assert.Equal(600 >> 8, cpu.ReadRegister(7));
         Assert.True(cpu.IsFlagSet(Flag.Carry));
         Assert.True(cpu.IsFlagSet(Flag.Overflow));
-        Assert.True(cpu.IsFlagSet(Flag.Zero));
     }
 
     [Fact]
-    public void Div_And_Mod_AreUnsigned()
+    public void Mul_WithoutOverflow_ClearsCarryAndR7()
     {
-        Assert.Equal("14 2", Output("MOV A, 100\nMOV R0, 7\nDIV R0\nOUT 0, A\nMOV A, 100\nMOD R0\nOUT 0, A\nHLT"));
+        CISCProcessor cpu = Run("MOV R7, 9\nMOV A, 6\nMOV R0, 7\nMUL R0\nHLT");
+
+        Assert.Equal(42, cpu.Accumulator);
+        Assert.Equal(0, cpu.ReadRegister(7));
+        Assert.False(cpu.IsFlagSet(Flag.Carry));
+    }
+
+    [Fact]
+    public void Div_DividesR7AByRn_AndLeavesTheRemainderInR7()
+    {
+        CISCProcessor cpu = Run("MOV R7, 1\nMOV A, 0\nMOV R0, 7\nDIV R0\nHLT");
+
+        Assert.Equal(256 / 7, cpu.Accumulator);
+        Assert.Equal(256 % 7, cpu.ReadRegister(7));
+        Assert.Equal(FaultKind.None, cpu.Fault);
     }
 
     [Fact]
@@ -162,5 +176,41 @@ public class AluTests
         Assert.True(cpu.Halted);
         Assert.Equal(FaultKind.DivideByZero, cpu.Fault);
         Assert.Equal(1, cpu.Accumulator);
+    }
+
+    [Fact]
+    public void Div_WithA16BitQuotient_FaultsLikeThe8086()
+    {
+        CISCProcessor cpu = Run("MOV R7, 1\nMOV A, 0\nMOV R0, 1\nDIV R0\nHLT");
+
+        Assert.Equal(FaultKind.DivideOverflow, cpu.Fault);
+    }
+
+    [Fact]
+    public void AddressArithmetic_Is16Bit()
+    {
+        CISCProcessor cpu = Run("MOV SI, 0xFFFF\nINC SI\nMOV DI, 0x8000\nCMP DI, 0x8001\nHLT");
+
+        Assert.Equal(0, cpu.SourceIndex);
+        Assert.True(cpu.IsFlagSet(Flag.Carry));
+        Assert.True(cpu.IsFlagSet(Flag.Negative));
+    }
+
+    [Fact]
+    public void AddXrA_AddsTheAccumulatorToAnAddressRegister()
+    {
+        CISCProcessor cpu = Run("MOV SI, 0x1000\nMOV A, 0xFF\nADD SI, A\nSUB SI, 0x0100\nHLT");
+
+        Assert.Equal(0x0FFF, cpu.SourceIndex);
+    }
+
+    [Fact]
+    public void Alu_NeverTouchesTheInterruptFlag()
+    {
+        CISCProcessor cpu = Run("EI\nMOV A, 0xFF\nADD A, 1\nDI\nHLT");
+
+        Assert.True(cpu.Halted);
+        Assert.True(cpu.IsFlagSet(Flag.Zero));
+        Assert.Equal("ZC---", cpu.GetState().FlagsText);
     }
 }

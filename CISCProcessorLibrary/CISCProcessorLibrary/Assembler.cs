@@ -5,21 +5,24 @@ using System.Text.RegularExpressions;
 namespace CISCProcessorLibrary;
 
 /// <summary>
-/// Two pass assembler for CISC-8 assembly.
+/// Two pass assembler for CISC-16 assembly.
 /// <para>Syntax: <c>[label:] MNEMONIC [operand[, operand]] [; comment]</c>.</para>
-/// <para>Operands: <c>A</c>, <c>R0</c>..<c>R7</c>, <c>SP</c>, <c>FLAGS</c>, a number or label (immediate / address),
-/// <c>[addr]</c>, <c>[Rn]</c> and <c>[addr+Rn]</c>. Numbers may be decimal, <c>0x</c> hex, <c>$</c> hex,
-/// <c>0b</c> binary or a character literal such as <c>'A'</c>; <c>+</c> and <c>-</c> may combine them with labels.</para>
-/// <para>Directives: <c>.org addr</c>, <c>.db byte, "text", ...</c>, <c>.ds count</c> and <c>.equ NAME, value</c>.</para>
+/// <para>Operands: <c>A</c>, <c>R0</c>..<c>R7</c>, <c>SI</c>, <c>DI</c>, <c>BP</c>, <c>SP</c>, <c>FLAGS</c>,
+/// a number or label (immediate / address), <c>[addr]</c>, <c>[Rn]</c>, <c>[addr+Rn]</c>, <c>[SI]</c> and
+/// <c>[BP+disp]</c> / <c>[BP-disp]</c>. Numbers may be decimal, <c>0x</c> hex, <c>$</c> hex, <c>0b</c> binary
+/// or a character literal such as <c>'A'</c>; <c>+</c> and <c>-</c> may combine them with labels.</para>
+/// <para>Directives: <c>.org addr</c>, <c>.db byte, "text", ...</c>, <c>.dw word, label, ...</c>,
+/// <c>.ds count</c> and <c>.equ NAME, value</c>.</para>
 /// </summary>
 public static class Assembler
 {
     private static readonly Regex LabelPattern = new(@"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:(.*)$", RegexOptions.Compiled);
     private static readonly Regex RegisterPattern = new(@"^R([0-7])$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex AddressRegisterPattern = new(@"^(SI|DI|BP|SP)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex IdentifierPattern = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
     private static readonly HashSet<string> ReservedWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "A", "SP", "FLAGS", "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
+        "A", "FLAGS", "SI", "DI", "BP", "SP", "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
     };
 
     /// <summary>Assembles <paramref name="source"/> with the default instruction set.</summary>
@@ -81,7 +84,7 @@ public static class Assembler
                 if (address >= Memory.Size)
                     throw new AssemblyException(statement.LineNumber, $"Program does not fit in {Memory.Size} bytes of memory.");
                 if (occupied[address])
-                    throw new AssemblyException(statement.LineNumber, $"Address 0x{address:X2} is emitted twice (check your .org directives).");
+                    throw new AssemblyException(statement.LineNumber, $"Address 0x{address:X4} is emitted twice (check your .org directives).");
                 occupied[address] = true;
             }
             listing.Add(new ListingLine(statement.LineNumber, statement.Address, bytes, statement.Source, statement.Instruction is not null));
@@ -145,12 +148,15 @@ public static class Assembler
                 break;
             }
             case ".DB":
+            case ".DW":
             {
+                bool words = name.Equals(".DW", StringComparison.OrdinalIgnoreCase);
                 string[] items = SplitOperands(arguments);
                 if (items.Length == 0)
-                    throw new AssemblyException(line, ".db needs at least one value.");
+                    throw new AssemblyException(line, $"{name} needs at least one value.");
                 statement.DataItems = items;
-                statement.Length = items.Sum(item => IsString(item) ? Unquote(item, line).Length : 1);
+                statement.DataWords = words;
+                statement.Length = items.Sum(item => IsString(item) ? Unquote(item, line).Length : (words ? 2 : 1));
                 if (location + statement.Length > Memory.Size)
                     throw new AssemblyException(line, $"Program does not fit in {Memory.Size} bytes of memory.");
                 statement.Address = location;
@@ -169,7 +175,7 @@ public static class Assembler
                 break;
             }
             default:
-                throw new AssemblyException(line, $"Unknown directive '{name}'. Supported: .org, .db, .ds, .equ");
+                throw new AssemblyException(line, $"Unknown directive '{name}'. Supported: .org, .db, .dw, .ds, .equ");
         }
     }
 
@@ -201,9 +207,11 @@ public static class Assembler
         if (syntax.Operands.Count != operands.Length) return false;
         for (int i = 0; i < operands.Length; i++)
         {
-            OperandKind expected = syntax.Operands[i].Kind;
-            OperandKind actual = operands[i].Kind;
-            bool ok = expected == actual || (expected.IsNumeric() && actual.IsNumeric());
+            OperandSlot slot = syntax.Operands[i];
+            ParsedOperand operand = operands[i];
+            bool ok = slot.Kind == OperandKind.Literal
+                ? operand.Kind == OperandKind.Immediate && string.Equals(operand.Expression, slot.Literal, StringComparison.OrdinalIgnoreCase)
+                : slot.Kind == operand.Kind || (slot.Kind.IsNumeric() && operand.Kind.IsNumeric());
             if (!ok) return false;
         }
         return true;
@@ -216,12 +224,15 @@ public static class Assembler
             throw new AssemblyException(line, "Empty operand.");
 
         if (text.Equals("A", StringComparison.OrdinalIgnoreCase)) return new ParsedOperand(OperandKind.Accumulator);
-        if (text.Equals("SP", StringComparison.OrdinalIgnoreCase)) return new ParsedOperand(OperandKind.StackPointer);
         if (text.Equals("FLAGS", StringComparison.OrdinalIgnoreCase)) return new ParsedOperand(OperandKind.Flags);
 
         Match register = RegisterPattern.Match(text);
         if (register.Success)
             return new ParsedOperand(OperandKind.Register) { Register = register.Groups[1].Value[0] - '0' };
+
+        Match addressRegister = AddressRegisterPattern.Match(text);
+        if (addressRegister.Success)
+            return new ParsedOperand(OperandKind.AddressRegister) { Register = AddressRegisterCode(addressRegister.Groups[1].Value) };
 
         if (text.StartsWith('[') && text.EndsWith(']'))
         {
@@ -232,6 +243,15 @@ public static class Assembler
             Match indirect = RegisterPattern.Match(inner);
             if (indirect.Success)
                 return new ParsedOperand(OperandKind.RegisterIndirect) { Register = indirect.Groups[1].Value[0] - '0' };
+
+            Match indirectAddress = AddressRegisterPattern.Match(inner);
+            if (indirectAddress.Success)
+                return new ParsedOperand(OperandKind.AddressRegisterIndirect) { Register = AddressRegisterCode(indirectAddress.Groups[1].Value) };
+
+            // [XR+disp] / [XR-disp]: an address register followed by a signed displacement.
+            Match based = Regex.Match(inner, @"^(SI|DI|BP|SP)\s*([+-].+)$", RegexOptions.IgnoreCase);
+            if (based.Success)
+                return new ParsedOperand(OperandKind.AddressRegisterDisplaced) { Register = AddressRegisterCode(based.Groups[1].Value), Expression = based.Groups[2].Value };
 
             int plus = inner.LastIndexOf('+');
             if (plus > 0)
@@ -254,6 +274,9 @@ public static class Assembler
 
         return new ParsedOperand(OperandKind.Immediate) { Expression = text };
     }
+
+    private static int AddressRegisterCode(string name) =>
+        Array.FindIndex(InstructionSyntax.AddressRegisterNames, n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Evaluates an expression that must already be known in pass 1 (.org, .equ, .ds).</summary>
     private static int EvaluateNow(string expression, Dictionary<string, int> symbols, int line, string directive)
@@ -360,6 +383,22 @@ public static class Assembler
         return (byte)value;
     }
 
+    /// <summary>Converts an evaluated value into a signed 8 bit displacement.</summary>
+    internal static byte ToDisplacement(int value, int line)
+    {
+        if (value is < -128 or > 127)
+            throw new AssemblyException(line, $"Displacement {value} does not fit in a signed byte (-128..127).");
+        return (byte)value;
+    }
+
+    /// <summary>Converts an evaluated value into a 16 bit word, allowing negative two's complement values.</summary>
+    internal static ushort ToWord(int value, int line, string what)
+    {
+        if (value is < -32768 or > 65535)
+            throw new AssemblyException(line, $"{what} {value} does not fit in 16 bits (-32768..65535).");
+        return (ushort)value;
+    }
+
     private static (string Head, string Tail) SplitHead(string text)
     {
         int i = 0;
@@ -456,6 +495,8 @@ public static class Assembler
 
         public string[]? DataItems { get; set; }
 
+        public bool DataWords { get; set; }
+
         public int ReservedBytes { get; set; }
 
         public byte[] Emit(IReadOnlyDictionary<string, int> symbols)
@@ -478,16 +519,25 @@ public static class Assembler
                 {
                     case OperandKind.Register:
                     case OperandKind.RegisterIndirect:
+                    case OperandKind.AddressRegister:
+                    case OperandKind.AddressRegisterIndirect:
                         bytes.Add((byte)operand.Register);
                         break;
                     case OperandKind.Immediate:
-                    case OperandKind.Address:
-                    case OperandKind.Direct:
                         bytes.Add(Assembler.ToByte(Evaluate(operand.Expression!, symbols, LineNumber), LineNumber, "Value"));
                         break;
+                    case OperandKind.Immediate16:
+                    case OperandKind.Address:
+                    case OperandKind.Direct:
+                        AddWord(bytes, Assembler.ToWord(Evaluate(operand.Expression!, symbols, LineNumber), LineNumber, slot.Kind == OperandKind.Immediate16 ? "Value" : "Address"));
+                        break;
                     case OperandKind.Indexed:
-                        bytes.Add(Assembler.ToByte(Evaluate(operand.Expression!, symbols, LineNumber), LineNumber, "Address"));
+                        AddWord(bytes, Assembler.ToWord(Evaluate(operand.Expression!, symbols, LineNumber), LineNumber, "Address"));
                         bytes.Add((byte)operand.Register);
+                        break;
+                    case OperandKind.AddressRegisterDisplaced:
+                        bytes.Add((byte)operand.Register);
+                        bytes.Add(Assembler.ToDisplacement(Evaluate(operand.Expression!, symbols, LineNumber), LineNumber));
                         break;
                 }
             }
@@ -508,12 +558,22 @@ public static class Assembler
                         bytes.Add((byte)c);
                     }
                 }
+                else if (DataWords)
+                {
+                    AddWord(bytes, Assembler.ToWord(Evaluate(item, symbols, LineNumber), LineNumber, "Value"));
+                }
                 else
                 {
                     bytes.Add(Assembler.ToByte(Evaluate(item, symbols, LineNumber), LineNumber, "Value"));
                 }
             }
             return bytes.ToArray();
+        }
+
+        private static void AddWord(List<byte> bytes, ushort value)
+        {
+            bytes.Add((byte)value);
+            bytes.Add((byte)(value >> 8));
         }
     }
 }

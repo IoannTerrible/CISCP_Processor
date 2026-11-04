@@ -7,4 +7,5 @@ public static class MemoryAccess
     public const string Operand = "operand";
     public const string Data = "data";
     public const string Stack = "stack";
+    public const string Vector = "vector";
 }

@@ -6,7 +6,7 @@ public sealed record DisassembledInstruction(int Address, byte[] Bytes, string T
     /// <summary>Size in bytes (1 for an invalid opcode).</summary>
     public int Length => Bytes.Length;
 
-    /// <summary>The bytes as hex, e.g. "19 80 01".</summary>
+    /// <summary>The bytes as hex, e.g. "19 80 00 01".</summary>
     public string BytesText => string.Join(' ', Bytes.Select(b => b.ToString("X2")));
 }
 
@@ -35,12 +35,7 @@ public static class Disassembler
         for (int i = 0; i < count; i++)
             bytes[1 + i] = memory.Read(address + 1 + i);
 
-        Operands operands = count switch
-        {
-            0 => Operands.None,
-            1 => new Operands(1, bytes[1]),
-            _ => new Operands(2, bytes[1], bytes[2]),
-        };
+        Operands operands = Operands.FromBytes(bytes.AsSpan(1));
         return new DisassembledInstruction(address, bytes, instruction.Syntax.Format(operands), instruction);
     }
 

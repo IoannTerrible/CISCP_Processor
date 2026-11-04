@@ -1,6 +1,6 @@
 namespace CISCProcessorLibrary;
 
-/// <summary>A machine instruction of the CISC-8 instruction set.</summary>
+/// <summary>A machine instruction of the CISC-16 instruction set.</summary>
 public interface IInstruction
 {
     /// <summary>The byte that encodes the instruction in memory.</summary>
@@ -11,9 +11,6 @@ public interface IInstruction
 
     /// <summary>Upper-case mnemonic, for example "ADD".</summary>
     string Mnemonic { get; }
-
-    /// <summary>Base number of clock cycles the instruction takes (some instructions add cycles at run time).</summary>
-    int Cycles { get; }
 
     /// <summary>Total size in bytes including the opcode.</summary>
     int Length { get; }

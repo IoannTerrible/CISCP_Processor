@@ -1,22 +1,23 @@
 using CISCProcessorLibrary;
+using CISCProcessorLibrary.Timing;
 
 namespace CISCProcessorLibrary.Tests;
 
 internal static class TestHelpers
 {
     /// <summary>Assembles, loads and runs <paramref name="source"/> on a fresh processor.</summary>
-    public static CISCProcessor Run(string source, int maxInstructions = 10_000)
+    public static CISCProcessor Run(string source, Microarchitecture microarchitecture = Microarchitecture.Classic1975, int maxSteps = 20_000)
     {
-        var cpu = new CISCProcessor();
+        var cpu = new CISCProcessor(microarchitecture);
         cpu.LoadAndRemember(source);
-        cpu.Run(maxInstructions);
+        cpu.Run(maxSteps);
         return cpu;
     }
 
     /// <summary>Runs <paramref name="source"/> and returns everything written to the output ports.</summary>
-    public static string Output(string source)
+    public static string Output(string source, string? input = null, Microarchitecture microarchitecture = Microarchitecture.Classic1975)
     {
-        var cpu = new CISCProcessor();
+        var cpu = new CISCProcessor(microarchitecture);
         var text = new System.Text.StringBuilder();
         cpu.OutputWritten += (_, e) =>
         {
@@ -24,7 +25,8 @@ internal static class TestHelpers
             if (e.Port == Ports.Numeric) text.Append(' ');
         };
         cpu.LoadProgram(source);
-        cpu.Run();
+        if (input is not null) cpu.InputDevice.Enqueue(input);
+        cpu.Run(20_000);
         return text.ToString().TrimEnd();
     }
 

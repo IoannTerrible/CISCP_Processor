@@ -7,8 +7,8 @@
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <Version>0.10.0</Version>
-    <Description>CISC-8: an 8 bit CISC processor simulator with assembler, disassembler and execution tracing.</Description>
+    <Version>0.20.0</Version>
+    <Description>CISC-16: a CISC processor simulator with 16 bit addressing, interrupts, I/O, an assembler, a disassembler, micro-operation tracing and three era timing models.</Description>
   </PropertyGroup>
 
 </Project>

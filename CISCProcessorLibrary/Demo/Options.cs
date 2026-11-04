@@ -1,3 +1,5 @@
+using CISCProcessorLibrary.Timing;
+
 namespace CISCProcessorDemo;
 
 /// <summary>Command line options of the demo.</summary>
@@ -13,13 +15,18 @@ internal sealed class Options
 
     public int DelayMilliseconds { get; set; }
 
-    public int MaxInstructions { get; private set; } = 100_000;
+    public int MaxSteps { get; private set; } = 100_000;
 
     public bool NoColor { get; private set; }
 
     public bool ListSamples { get; private set; }
 
     public bool ShowHelp { get; private set; }
+
+    public Microarchitecture Microarchitecture { get; set; } = Microarchitecture.Classic1975;
+
+    /// <summary>Text queued into the input device before the program starts.</summary>
+    public string? Input { get; set; }
 
     public static Options Parse(string[] args)
     {
@@ -41,10 +48,16 @@ internal sealed class Options
                     options.Trace = true;
                     break;
                 case "--max":
-                    options.MaxInstructions = ParseInt(args, ref i, arg);
+                    options.MaxSteps = ParseInt(args, ref i, arg);
                     break;
                 case "--sample":
                     options.SampleId = Next(args, ref i, arg);
+                    break;
+                case "--arch":
+                    options.Microarchitecture = ParseArchitecture(Next(args, ref i, arg));
+                    break;
+                case "--input":
+                    options.Input = Next(args, ref i, arg);
                     break;
                 case "--no-color":
                     options.NoColor = true;
@@ -66,6 +79,15 @@ internal sealed class Options
         }
         return options;
     }
+
+    /// <summary>Accepts the year, the name or the enum member: 1975 / classic, 1985 / prefetch, 1995 / pipelined.</summary>
+    public static Microarchitecture ParseArchitecture(string text) => text.ToLowerInvariant() switch
+    {
+        "1975" or "classic" or "classic1975" or "8080" => Microarchitecture.Classic1975,
+        "1985" or "prefetch" or "prefetch1985" or "8086" => Microarchitecture.Prefetch1985,
+        "1995" or "pipelined" or "pipeline" or "pipelined1995" or "pentium" => Microarchitecture.Pipelined1995,
+        _ => throw new ArgumentException($"Unknown micro-architecture '{text}'. Use 1975 (classic), 1985 (prefetch) or 1995 (pipelined)."),
+    };
 
     private static string Next(string[] args, ref int i, string option)
     {

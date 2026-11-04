@@ -4,8 +4,8 @@ namespace CISCProcessorLibrary;
 public static class SimulatorInfo
 {
     /// <summary>Name of the simulated machine.</summary>
-    public const string Name = "CISC-8";
+    public const string Name = "CISC-16";
 
     /// <summary>Version of the simulator (kept in step with the csproj and the README).</summary>
-    public const string Version = "0.10.0";
+    public const string Version = "0.20.0";
 }

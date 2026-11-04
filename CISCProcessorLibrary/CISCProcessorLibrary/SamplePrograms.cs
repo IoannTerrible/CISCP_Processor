@@ -1,7 +1,8 @@
 namespace CISCProcessorLibrary;
 
 /// <summary>A ready to run assembly program shipped with the library.</summary>
-public sealed record SampleProgram(string Id, string Name, string Description, string Source);
+/// <param name="Input">Text queued into the input device before the program runs (null for none).</param>
+public sealed record SampleProgram(string Id, string Name, string Description, string Source, string? Input = null);
 
 /// <summary>Example programs that show off the instruction set. The web visualiser ships the same sources.</summary>
 public static class SamplePrograms
@@ -65,6 +66,7 @@ public static class SamplePrograms
         "Computes 5! inside a subroutine that keeps its working register on the stack.",
         """
         ; Compute 5! = 120 with a subroutine and the MUL instruction.
+        ; MUL leaves the high byte of the product in R7, like AH on the 8086.
                 MOV R0, 5
                 CALL factorial
                 OUT 0, A            ; prints 120
@@ -73,7 +75,7 @@ public static class SamplePrograms
         factorial:                  ; A = R0!, R0 is preserved
                 PUSH R0
                 MOV A, 1
-        again:  MUL R0              ; A = A * R0
+        again:  MUL R0              ; R7:A = A * R0
                 DEC R0
                 JNZ again
                 POP R0
@@ -83,16 +85,15 @@ public static class SamplePrograms
     public static readonly SampleProgram Hello = new(
         "hello",
         "Hello, CISC!",
-        "Walks a zero terminated string with register indirect addressing and prints it on the character port.",
+        "Walks a zero terminated string with the string instruction LODSB and prints it on the character port.",
         """
         ; Print a zero terminated string character by character.
-        ; [R0] is register indirect addressing: the address is held in R0.
-                MOV R0, text        ; R0 points at the first character
-        next:   MOV A, [R0]
+        ; LODSB loads A from [SI] and advances SI: one instruction instead of three.
+                MOV SI, text        ; SI points at the first character
+        next:   LODSB               ; A = [SI], SI = SI + 1
                 CMP A, 0
                 JZ done             ; stop at the terminator
                 OUT 1, A            ; port 1 prints characters
-                INC R0
                 JMP next
         done:   HLT
         text:   .db "Hello, CISC!", 0
@@ -125,7 +126,7 @@ public static class SamplePrograms
     public static readonly SampleProgram BubbleSort = new(
         "sort",
         "Bubble sort",
-        "Sorts six bytes in place with nested LOOPs and indexed stores, then prints them.",
+        "Sorts six bytes in place with nested LOOPs and indexed stores, then prints them. Try the three micro-architectures on it.",
         """
         ; Sort the bytes at 'list' in place (bubble sort) and print them.
                 MOV R0, 5           ; passes = n - 1
@@ -155,6 +156,155 @@ public static class SamplePrograms
         list:   .db 42, 7, 19, 3, 88, 25
         """);
 
+    public static readonly SampleProgram Strings = new(
+        "strings",
+        "String instructions (REP MOVSB)",
+        "Copies a string with one REP MOVSB and prints the copy with a LODSB loop.",
+        """
+        ; Copy a string with a single REP MOVSB, then print the copy.
+        ; SI = source, DI = destination, R6 = byte count (the CX of this machine).
+                MOV SI, source
+                MOV DI, buffer
+                MOV R6, 14          ; 13 characters plus the terminator
+                REP MOVSB           ; the whole copy in one instruction
+                MOV SI, buffer
+        next:   LODSB
+                CMP A, 0
+                JZ done
+                OUT 1, A
+                JMP next
+        done:   HLT
+        source: .db "String ops OK", 0
+        buffer: .ds 14
+        """);
+
+    public static readonly SampleProgram Scan = new(
+        "scan",
+        "Fill and scan (REP STOSB / SCASB)",
+        "Fills a buffer with REP STOSB, plants a marker and finds it again with REP SCASB.",
+        """
+        ; Fill 16 bytes with '-', put a '*' at index 9 and find it with REP SCASB.
+                MOV DI, buffer
+                MOV A, '-'
+                MOV R6, 16
+                REP STOSB           ; fill the buffer
+                MOV A, '*'
+                MOV R1, 9
+                MOV [buffer+R1], A  ; plant the marker
+                MOV DI, buffer
+                MOV R6, 16
+                REP SCASB           ; stop after the first byte equal to A
+                MOV A, 16           ; index = 16 - R6 - 1
+                SUB A, R6
+                DEC A
+                OUT 0, A            ; prints 9
+                HLT
+        buffer: .ds 16
+        """);
+
+    public static readonly SampleProgram Frames = new(
+        "frames",
+        "Stack frames (ENTER / LEAVE / [BP+disp])",
+        "Calls a function with two stack arguments and a local variable, the way a compiler would.",
+        """
+        ; A C style call: arguments on the stack, ENTER builds the frame, BP addresses locals and arguments.
+                MOV A, 30
+                PUSH A              ; second argument
+                MOV A, 12
+                PUSH A              ; first argument
+                CALL add2
+                ADD SP, 2           ; the caller removes the arguments
+                OUT 0, A            ; prints 42
+                HLT
+
+        add2:   ENTER 1             ; push BP, BP = SP, one byte of locals
+                MOV A, [BP+4]       ; first argument  (BP+0..1 = old BP, BP+2..3 = return address)
+                MOV [BP-1], A       ; keep it in the local variable
+                MOV A, [BP+5]       ; second argument
+                MOV R1, [BP-1]      ; fetch the local
+                ADD A, R1
+                LEAVE               ; SP = BP, pop BP
+                RET
+        """);
+
+    public static readonly SampleProgram JumpTable = new(
+        "jumptable",
+        "Jump table (JMP [SI])",
+        "Dispatches through a table of 16 bit addresses with an indirect jump, the computed goto of CISC machines.",
+        """
+        ; Dispatch through a jump table: JMP [SI] jumps to the 16 bit address stored at SI.
+                MOV R0, 1           ; which routine to run: 0, 1 or 2
+                MOV A, R0
+                SHL A               ; entries are 2 bytes wide
+                MOV SI, table
+                ADD SI, A           ; SI = table + 2 * R0
+                JMP [SI]            ; computed goto
+        zero:   MOV A, 'Z'
+                JMP show
+        one:    MOV A, 'O'
+                JMP show
+        two:    MOV A, 'T'
+        show:   OUT 1, A
+                HLT
+        table:  .dw zero, one, two
+        """);
+
+    public static readonly SampleProgram Interrupt = new(
+        "interrupt",
+        "Timer interrupt",
+        "A programmable timer raises IRQ 0; the handler counts ticks while the main program sleeps in HLT.",
+        """
+        ; The timer raises IRQ 0 every 200 clock cycles. The handler counts the ticks and prints them;
+        ; the main program sleeps in HLT between interrupts and stops for good after the fifth tick.
+                MOV A, 200          ; timer period, low byte
+                OUT 2, A
+                MOV A, 0            ; timer period, high byte
+                OUT 3, A
+                MOV A, 1            ; start the timer
+                OUT 4, A
+                MOV R0, 0           ; tick counter
+                EI                  ; allow interrupts
+        wait:   HLT                 ; sleep until the next interrupt
+                MOV A, R0
+                CMP A, 5
+                JNZ wait
+                DI
+                HLT                 ; interrupts disabled: this one really stops
+
+        handler:                    ; IRQ 0 service routine
+                PUSH A
+                INC R0
+                MOV A, R0
+                OUT 0, A            ; prints 1 2 3 4 5
+                POP A
+                IRET
+
+                .org 0xFFF0         ; interrupt vector table
+                .dw handler         ; IRQ 0 -> handler
+        """);
+
+    public static readonly SampleProgram Echo = new(
+        "echo",
+        "Input echo (IN)",
+        "Reads the input device until it is empty and echoes every character in upper case.",
+        """
+        ; Read characters from the input device until the queue is empty and echo them in upper case.
+        ; Port 6 reports whether a byte is waiting, port 1 delivers the next character.
+        next:   IN A, 6             ; input status: bit 0 = a byte is waiting
+                AND A, 1
+                JZ done
+                IN A, 1             ; next character
+                CMP A, 'a'
+                JC echo             ; below 'a': leave it
+                CMP A, 'z'+1
+                JNC echo            ; above 'z': leave it
+                SUB A, 32           ; to upper case
+        echo:   OUT 1, A
+                JMP next
+        done:   HLT
+        """,
+        "hello, cisc-16!");
+
     public static readonly SampleProgram DivideByZero = new(
         "fault",
         "Hardware fault",
@@ -170,7 +320,8 @@ public static class SamplePrograms
     /// <summary>All sample programs in menu order.</summary>
     public static IReadOnlyList<SampleProgram> All { get; } = new[]
     {
-        Countdown, SumArray, Fibonacci, Factorial, Hello, Stack, BubbleSort, DivideByZero,
+        Countdown, SumArray, Fibonacci, Factorial, Hello, Stack, BubbleSort,
+        Strings, Scan, Frames, JumpTable, Interrupt, Echo, DivideByZero,
     };
 
     /// <summary>Finds a sample by its id (case-insensitive).</summary>

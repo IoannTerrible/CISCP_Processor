@@ -16,7 +16,8 @@ internal sealed class InteractiveMenu
     public void Run()
     {
         ConsoleUi.Title($"{SimulatorInfo.Name} processor simulator {SimulatorInfo.Version}");
-        Console.WriteLine("An 8 bit CISC machine: accumulator, R0..R7, 256 bytes of memory, hardware stack, Z C N V flags.");
+        Console.WriteLine("An 8 bit data path with 16 bit addressing: A, R0..R7, SI, DI, BP, SP, 64 KB of memory, interrupts, I/O ports,");
+        Console.WriteLine("and three switchable micro-architectures (1975 multi-cycle, 1985 prefetch queue, 1995 pipeline + caches).");
 
         while (true)
         {
@@ -24,7 +25,8 @@ internal sealed class InteractiveMenu
             ConsoleUi.WriteLine("1. Run a sample program", ConsoleColor.Yellow);
             ConsoleUi.WriteLine("2. Write and run your own program", ConsoleColor.Yellow);
             ConsoleUi.WriteLine("3. Instruction set reference", ConsoleColor.Yellow);
-            ConsoleUi.WriteLine("4. Exit", ConsoleColor.Yellow);
+            ConsoleUi.WriteLine($"4. Micro-architecture (now: {options.Microarchitecture})", ConsoleColor.Yellow);
+            ConsoleUi.WriteLine("5. Exit", ConsoleColor.Yellow);
             string? choice = Prompt("Choose: ");
             if (choice is null) return;
 
@@ -39,7 +41,10 @@ internal sealed class InteractiveMenu
                 case "3":
                     ConsoleUi.PrintInstructionSet(InstructionSet.Default);
                     break;
-                case "4" or "q" or "exit":
+                case "4":
+                    ChooseArchitecture();
+                    break;
+                case "5" or "q" or "exit":
                     return;
                 default:
                     ConsoleUi.Error("Invalid choice. Please try again.");
@@ -68,6 +73,7 @@ internal sealed class InteractiveMenu
 
         SampleProgram selected = SamplePrograms.All[index - 1];
         if (!AskRunSettings()) return;
+        options.Input = selected.Input;
         Runner.Run(selected.Name, selected.Source, options);
     }
 
@@ -98,7 +104,24 @@ internal sealed class InteractiveMenu
         }
 
         if (!AskRunSettings()) return;
+        options.Input = null;
         Runner.Run("your program", source.ToString(), options);
+    }
+
+    private void ChooseArchitecture()
+    {
+        ConsoleUi.Title("Micro-architecture");
+        Console.WriteLine("1. 1975 - multi-cycle control unit, every bus cycle costs T-states (8080 style)");
+        Console.WriteLine("2. 1985 - bus interface unit with a 6 byte prefetch queue (8086 style)");
+        Console.WriteLine("3. 1995 - five stage pipeline, instruction and data caches, branch predictor (Pentium style)");
+        string? choice = Prompt("Choose: ");
+        options.Microarchitecture = choice?.Trim() switch
+        {
+            "1" => CISCProcessorLibrary.Timing.Microarchitecture.Classic1975,
+            "2" => CISCProcessorLibrary.Timing.Microarchitecture.Prefetch1985,
+            "3" => CISCProcessorLibrary.Timing.Microarchitecture.Pipelined1995,
+            _ => options.Microarchitecture,
+        };
     }
 
     private bool AskRunSettings()

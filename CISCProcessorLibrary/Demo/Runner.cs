@@ -23,8 +23,14 @@ internal static class Runner
 
         ConsoleUi.PrintListing(program);
 
-        var cpu = new CISCProcessor();
+        var cpu = new CISCProcessor(options.Microarchitecture);
         cpu.LoadProgram(program);
+        if (!string.IsNullOrEmpty(options.Input)) cpu.InputDevice.Enqueue(options.Input);
+        cpu.InputDevice.OnEmpty = () =>
+        {
+            ConsoleUi.Write("input> ", ConsoleColor.Cyan);
+            return Console.ReadLine();
+        };
 
         var output = new StringBuilder();
         var pendingOutput = new List<OutputEventArgs>();
@@ -35,10 +41,13 @@ internal static class Runner
             pendingOutput.Add(e);
         };
 
+        ConsoleUi.Write("Micro-architecture: ", ConsoleColor.DarkGray);
+        ConsoleUi.WriteLine(cpu.Timing.Name, ConsoleColor.White);
+
         if (options.Trace)
         {
             ConsoleUi.Title("Execution trace");
-            ConsoleUi.WriteLine("At  Bytes    Instruction         | registers after the instruction (changed = yellow)", ConsoleColor.DarkGray);
+            ConsoleUi.WriteLine("Addr  Bytes       Instruction           | registers after the step (changed = yellow)", ConsoleColor.DarkGray);
             ProcessorState? previous = cpu.GetState();
             cpu.InstructionExecuted += (_, step) =>
             {
@@ -56,7 +65,7 @@ internal static class Runner
             ConsoleUi.Title("Running");
         }
 
-        RunResult result = cpu.Run(options.MaxInstructions);
+        RunResult result = cpu.Run(options.MaxSteps);
 
         Console.WriteLine();
         ConsoleUi.Write("Output: ", ConsoleColor.DarkGray);
@@ -70,12 +79,15 @@ internal static class Runner
             case StopReason.Fault:
                 ConsoleUi.Error($"{result.Fault}: {result.FaultMessage} (after {result.InstructionsExecuted} instructions)");
                 break;
-            case StopReason.InstructionLimit:
-                ConsoleUi.WriteLine($"Stopped after {result.InstructionsExecuted} instructions without reaching HLT (endless loop?).", ConsoleColor.Yellow);
+            case StopReason.StepLimit:
+                ConsoleUi.WriteLine(cpu.Waiting
+                    ? $"Stopped after {options.MaxSteps} steps while waiting for an interrupt that never came."
+                    : $"Stopped after {options.MaxSteps} steps without reaching HLT (endless loop?).", ConsoleColor.Yellow);
                 break;
         }
 
         ConsoleUi.PrintRegisters(result.FinalState);
+        ConsoleUi.PrintTiming(cpu);
         ConsoleUi.PrintMemory(cpu);
         return result.Reason == StopReason.Halted;
     }

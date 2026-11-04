@@ -5,7 +5,10 @@ namespace CISCProcessorLibrary;
 /// <summary>One source line of an assembled program together with the bytes it produced.</summary>
 public sealed record ListingLine(int LineNumber, int Address, byte[] Bytes, string Source, bool IsInstruction)
 {
-    /// <summary>The emitted bytes as hex, e.g. "19 80 01".</summary>
+    /// <summary>True for .db / .dw / .ds lines that emitted bytes.</summary>
+    public bool IsData => !IsInstruction && Bytes.Length > 0;
+
+    /// <summary>The emitted bytes as hex, e.g. "19 80 00 01".</summary>
     public string BytesText => string.Join(' ', Bytes.Select(b => b.ToString("X2")));
 }
 
@@ -32,7 +35,7 @@ public sealed class AssembledProgram
     /// <summary>Total number of bytes emitted.</summary>
     public int Length { get; }
 
-    /// <summary>Renders the program as a full 256 byte memory image.</summary>
+    /// <summary>Renders the program as a full 64 KB memory image.</summary>
     public byte[] ToImage()
     {
         var image = new byte[Memory.Size];
@@ -51,8 +54,8 @@ public sealed class AssembledProgram
         var text = new StringBuilder();
         foreach (ListingLine line in Listing)
         {
-            string address = line.Bytes.Length > 0 ? $"{line.Address:X2}" : "  ";
-            text.Append(address).Append("  ").Append(line.BytesText.PadRight(9)).Append("  ").AppendLine(line.Source);
+            string address = line.Bytes.Length > 0 ? $"{line.Address:X4}" : "    ";
+            text.Append(address).Append("  ").Append(line.BytesText.PadRight(12)).Append("  ").AppendLine(line.Source);
         }
         return text.ToString();
     }

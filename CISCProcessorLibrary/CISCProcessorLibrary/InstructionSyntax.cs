@@ -1,11 +1,12 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace CISCProcessorLibrary;
 
 /// <summary>
 /// One operand slot of an instruction: its addressing mode and where its bytes live inside the operand stream.
 /// </summary>
-public sealed record OperandSlot(OperandKind Kind, int ByteOffset)
+public sealed record OperandSlot(OperandKind Kind, int ByteOffset, string? Literal = null)
 {
     /// <summary>Number of bytes the slot occupies.</summary>
     public int ByteCount => Kind.ByteCount();
@@ -18,18 +19,30 @@ public sealed record OperandSlot(OperandKind Kind, int ByteOffset)
 /// </summary>
 public sealed class InstructionSyntax
 {
-    private static readonly Dictionary<string, OperandKind> Tokens = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>Names of the 16 bit address registers in encoding order.</summary>
+    public static readonly string[] AddressRegisterNames = { "SI", "DI", "BP", "SP" };
+
+    private static readonly Regex LiteralPattern = new("^[A-Z][A-Z0-9]*$", RegexOptions.Compiled);
+    private static readonly int MaxOperandBytes = global::CISCProcessorLibrary.Operands.MaxBytes;
+
+    private static readonly Dictionary<string, OperandKind> Tokens = new(StringComparer.Ordinal)
     {
         ["A"] = OperandKind.Accumulator,
         ["Rn"] = OperandKind.Register,
         ["Rm"] = OperandKind.Register,
+        ["XR"] = OperandKind.AddressRegister,
+        ["XS"] = OperandKind.AddressRegister,
         ["imm8"] = OperandKind.Immediate,
         ["port"] = OperandKind.Immediate,
+        ["imm16"] = OperandKind.Immediate16,
         ["addr"] = OperandKind.Address,
         ["[addr]"] = OperandKind.Direct,
         ["[Rn]"] = OperandKind.RegisterIndirect,
         ["[addr+Rn]"] = OperandKind.Indexed,
-        ["SP"] = OperandKind.StackPointer,
+        ["[XR]"] = OperandKind.AddressRegisterIndirect,
+        ["[XS]"] = OperandKind.AddressRegisterIndirect,
+        ["[XR+disp8]"] = OperandKind.AddressRegisterDisplaced,
+        ["[XS+disp8]"] = OperandKind.AddressRegisterDisplaced,
         ["FLAGS"] = OperandKind.Flags,
     };
 
@@ -48,15 +61,18 @@ public sealed class InstructionSyntax
             foreach (string raw in Template[(space + 1)..].Split(','))
             {
                 string token = raw.Trim();
-                if (!Tokens.TryGetValue(token, out OperandKind kind))
+                if (Tokens.TryGetValue(token, out OperandKind kind))
+                    slots.Add(new OperandSlot(kind, offset));
+                else if (LiteralPattern.IsMatch(token))
+                    slots.Add(new OperandSlot(OperandKind.Literal, offset, token));
+                else
                     throw new ArgumentException($"Unknown operand token '{token}' in syntax template '{template}'.", nameof(template));
-                slots.Add(new OperandSlot(kind, offset));
-                offset += kind.ByteCount();
+                offset += slots[^1].ByteCount;
             }
         }
 
-        if (offset > 2)
-            throw new ArgumentException($"Syntax template '{template}' needs {offset} operand bytes but at most two are supported.", nameof(template));
+        if (offset > MaxOperandBytes)
+            throw new ArgumentException($"Syntax template '{template}' needs {offset} operand bytes but at most {MaxOperandBytes} are supported.", nameof(template));
 
         Operands = slots;
         OperandByteCount = offset;
@@ -74,7 +90,10 @@ public sealed class InstructionSyntax
     /// <summary>Total number of operand bytes that follow the opcode.</summary>
     public int OperandByteCount { get; }
 
-    /// <summary>Renders the instruction with concrete operand values, e.g. "MOV A, [0x80+R1]".</summary>
+    /// <summary>Name of the address register with the given encoding (only the low two bits are used).</summary>
+    public static string AddressRegisterName(int code) => AddressRegisterNames[code & 3];
+
+    /// <summary>Renders the instruction with concrete operand values, e.g. "MOV A, [0x0080+R1]".</summary>
     public string Format(Operands operands)
     {
         if (Operands.Count == 0)
@@ -84,23 +103,35 @@ public sealed class InstructionSyntax
         for (int i = 0; i < Operands.Count; i++)
         {
             if (i > 0) text.Append(", ");
-            OperandSlot slot = Operands[i];
-            text.Append(slot.Kind switch
-            {
-                OperandKind.Accumulator => "A",
-                OperandKind.StackPointer => "SP",
-                OperandKind.Flags => "FLAGS",
-                OperandKind.Register => $"R{operands[slot.ByteOffset] & 7}",
-                OperandKind.Immediate => operands[slot.ByteOffset].ToString(),
-                OperandKind.Address => $"0x{operands[slot.ByteOffset]:X2}",
-                OperandKind.Direct => $"[0x{operands[slot.ByteOffset]:X2}]",
-                OperandKind.RegisterIndirect => $"[R{operands[slot.ByteOffset] & 7}]",
-                OperandKind.Indexed => $"[0x{operands[slot.ByteOffset]:X2}+R{operands[slot.ByteOffset + 1] & 7}]",
-                _ => "?",
-            });
+            text.Append(FormatOperand(Operands[i], operands));
         }
         return text.ToString();
     }
+
+    private static string FormatOperand(OperandSlot slot, Operands operands)
+    {
+        int o = slot.ByteOffset;
+        return slot.Kind switch
+        {
+            OperandKind.Accumulator => "A",
+            OperandKind.Flags => "FLAGS",
+            OperandKind.Literal => slot.Literal ?? "?",
+            OperandKind.Register => $"R{operands[o] & 7}",
+            OperandKind.AddressRegister => AddressRegisterName(operands[o]),
+            OperandKind.Immediate => operands[o].ToString(),
+            OperandKind.Immediate16 => $"0x{operands.Word(o):X4}",
+            OperandKind.Address => $"0x{operands.Word(o):X4}",
+            OperandKind.Direct => $"[0x{operands.Word(o):X4}]",
+            OperandKind.RegisterIndirect => $"[R{operands[o] & 7}]",
+            OperandKind.Indexed => $"[0x{operands.Word(o):X4}+R{operands[o + 2] & 7}]",
+            OperandKind.AddressRegisterIndirect => $"[{AddressRegisterName(operands[o])}]",
+            OperandKind.AddressRegisterDisplaced => FormatDisplaced(operands[o], (sbyte)operands[o + 1]),
+            _ => "?",
+        };
+    }
+
+    private static string FormatDisplaced(int register, int displacement) =>
+        displacement >= 0 ? $"[{AddressRegisterName(register)}+{displacement}]" : $"[{AddressRegisterName(register)}{displacement}]";
 
     public override string ToString() => Template;
 }

@@ -6,11 +6,10 @@ namespace CISCProcessorLibrary;
 /// </summary>
 public abstract class Instruction : IInstruction
 {
-    protected Instruction(byte opcode, string syntax, int cycles, string description)
+    protected Instruction(byte opcode, string syntax, string description)
     {
         Opcode = opcode;
         Syntax = new InstructionSyntax(syntax);
-        Cycles = cycles;
         Description = description;
     }
 
@@ -19,8 +18,6 @@ public abstract class Instruction : IInstruction
     public InstructionSyntax Syntax { get; }
 
     public string Mnemonic => Syntax.Mnemonic;
-
-    public int Cycles { get; }
 
     public int Length => 1 + Syntax.OperandByteCount;
 
@@ -31,55 +28,91 @@ public abstract class Instruction : IInstruction
     /// <summary>Operand slot <paramref name="index"/> of the syntax template.</summary>
     protected OperandSlot Slot(int index) => Syntax.Operands[index];
 
-    /// <summary>Reads the value an operand slot refers to, performing the memory access of its addressing mode.</summary>
-    protected static byte ReadOperand(CISCProcessor cpu, OperandSlot slot, Operands operands) => slot.Kind switch
+    /// <summary>Reads the 8 bit value an operand slot refers to, performing the memory access of its addressing mode.</summary>
+    protected static byte ReadOperand(CISCProcessor cpu, OperandSlot slot, Operands operands)
     {
-        OperandKind.Accumulator => cpu.Accumulator,
-        OperandKind.Register => cpu.ReadRegister(operands[slot.ByteOffset]),
-        OperandKind.Immediate => operands[slot.ByteOffset],
-        OperandKind.Address => operands[slot.ByteOffset],
-        OperandKind.Direct => cpu.ReadMemory(operands[slot.ByteOffset], MemoryAccess.Data),
-        OperandKind.RegisterIndirect => cpu.ReadMemory(cpu.ReadRegister(operands[slot.ByteOffset]), MemoryAccess.Data),
-        OperandKind.Indexed => cpu.ReadMemory(EffectiveAddress(cpu, slot, operands), MemoryAccess.Data),
-        OperandKind.StackPointer => cpu.StackPointer,
-        OperandKind.Flags => cpu.FlagRegister,
-        _ => throw new InvalidOperationException($"Unsupported operand kind {slot.Kind}."),
-    };
+        int o = slot.ByteOffset;
+        return slot.Kind switch
+        {
+            OperandKind.Accumulator => cpu.Accumulator,
+            OperandKind.Register => cpu.ReadRegister(operands[o]),
+            OperandKind.Immediate => operands[o],
+            OperandKind.Flags => cpu.FlagRegister,
+            _ when slot.Kind.IsMemory() => cpu.ReadMemory(EffectiveAddress(cpu, slot, operands), MemoryAccess.Data),
+            _ => throw new InvalidOperationException($"Operand kind {slot.Kind} is not an 8 bit operand."),
+        };
+    }
 
-    /// <summary>Stores <paramref name="value"/> into the register or memory cell an operand slot refers to.</summary>
+    /// <summary>Stores an 8 bit value into the register or memory cell an operand slot refers to.</summary>
     protected static void WriteOperand(CISCProcessor cpu, OperandSlot slot, Operands operands, byte value)
     {
+        int o = slot.ByteOffset;
         switch (slot.Kind)
         {
             case OperandKind.Accumulator:
                 cpu.Accumulator = value;
                 break;
             case OperandKind.Register:
-                cpu.WriteRegister(operands[slot.ByteOffset], value);
-                break;
-            case OperandKind.Direct:
-                cpu.WriteMemory(operands[slot.ByteOffset], value, MemoryAccess.Data);
-                break;
-            case OperandKind.RegisterIndirect:
-                cpu.WriteMemory(cpu.ReadRegister(operands[slot.ByteOffset]), value, MemoryAccess.Data);
-                break;
-            case OperandKind.Indexed:
-                cpu.WriteMemory(EffectiveAddress(cpu, slot, operands), value, MemoryAccess.Data);
-                break;
-            case OperandKind.StackPointer:
-                cpu.StackPointer = value;
+                cpu.WriteRegister(operands[o], value);
                 break;
             case OperandKind.Flags:
                 cpu.FlagRegister = value;
                 break;
             default:
-                throw new InvalidOperationException($"Operand kind {slot.Kind} cannot be written.");
+                if (!slot.Kind.IsMemory())
+                    throw new InvalidOperationException($"Operand kind {slot.Kind} cannot be written as a byte.");
+                cpu.WriteMemory(EffectiveAddress(cpu, slot, operands), value, MemoryAccess.Data);
+                break;
         }
     }
 
-    /// <summary>Computes addr + Rn for the indexed addressing mode (wrapping inside the 8 bit address space).</summary>
-    private static int EffectiveAddress(CISCProcessor cpu, OperandSlot slot, Operands operands) =>
-        Memory.Wrap(operands[slot.ByteOffset] + cpu.ReadRegister(operands[slot.ByteOffset + 1]));
+    /// <summary>Reads the 16 bit value an operand slot refers to (address registers, imm16, or two bytes of memory).</summary>
+    protected static ushort ReadOperand16(CISCProcessor cpu, OperandSlot slot, Operands operands)
+    {
+        int o = slot.ByteOffset;
+        return slot.Kind switch
+        {
+            OperandKind.AddressRegister => cpu.ReadAddressRegister(operands[o]),
+            OperandKind.Immediate16 => operands.Word(o),
+            OperandKind.Address => operands.Word(o),
+            _ when slot.Kind.IsMemory() => cpu.ReadMemoryWord(EffectiveAddress(cpu, slot, operands), MemoryAccess.Data),
+            _ => throw new InvalidOperationException($"Operand kind {slot.Kind} is not a 16 bit operand."),
+        };
+    }
+
+    /// <summary>Stores a 16 bit value into an address register or two bytes of memory.</summary>
+    protected static void WriteOperand16(CISCProcessor cpu, OperandSlot slot, Operands operands, ushort value)
+    {
+        int o = slot.ByteOffset;
+        switch (slot.Kind)
+        {
+            case OperandKind.AddressRegister:
+                cpu.WriteAddressRegister(operands[o], value);
+                break;
+            default:
+                if (!slot.Kind.IsMemory())
+                    throw new InvalidOperationException($"Operand kind {slot.Kind} cannot be written as a word.");
+                cpu.WriteMemoryWord(EffectiveAddress(cpu, slot, operands), value, MemoryAccess.Data);
+                break;
+        }
+    }
+
+    /// <summary>Computes the memory address an operand refers to, charging the timing model for the address calculation.</summary>
+    protected static int EffectiveAddress(CISCProcessor cpu, OperandSlot slot, Operands operands)
+    {
+        int o = slot.ByteOffset;
+        int address = slot.Kind switch
+        {
+            OperandKind.Direct => operands.Word(o),
+            OperandKind.RegisterIndirect => cpu.ReadRegister(operands[o]),
+            OperandKind.Indexed => operands.Word(o) + cpu.ReadRegister(operands[o + 2]),
+            OperandKind.AddressRegisterIndirect => cpu.ReadAddressRegister(operands[o]),
+            OperandKind.AddressRegisterDisplaced => cpu.ReadAddressRegister(operands[o]) + (sbyte)operands[o + 1],
+            _ => throw new InvalidOperationException($"Operand kind {slot.Kind} does not address memory."),
+        };
+        cpu.ChargeEffectiveAddress(slot.Kind);
+        return Memory.Wrap(address);
+    }
 
     public override string ToString() => $"{Opcode:X2} {Syntax.Template}";
 }

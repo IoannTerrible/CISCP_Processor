@@ -15,6 +15,12 @@ public enum CyclePhase
     /// <summary>The decoded instruction is being executed by the ALU / data path.</summary>
     Execute,
 
-    /// <summary>The processor stopped (HLT instruction or a fault).</summary>
+    /// <summary>An interrupt request is being acknowledged: FLAGS and IP are saved and the vector is loaded.</summary>
+    Interrupt,
+
+    /// <summary>HLT was executed with interrupts enabled: the clock runs but nothing executes until an interrupt arrives.</summary>
+    Waiting,
+
+    /// <summary>The processor stopped (HLT with interrupts disabled, or a fault).</summary>
     Halted,
 }

@@ -12,9 +12,12 @@ public enum FaultKind
     /// <summary>A push happened while the stack pointer was already at the bottom of memory.</summary>
     StackOverflow,
 
-    /// <summary>A pop (or RET) happened while the stack was empty.</summary>
+    /// <summary>A pop (or RET / IRET / LEAVE) happened while the stack was empty.</summary>
     StackUnderflow,
 
-    /// <summary>DIV or MOD by a zero divisor.</summary>
+    /// <summary>DIV by a zero divisor.</summary>
     DivideByZero,
+
+    /// <summary>DIV produced a quotient that does not fit in 8 bits (the 8086 "divide error").</summary>
+    DivideOverflow,
 }

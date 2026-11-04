@@ -6,7 +6,7 @@ public enum MicroOpKind
     /// <summary>Opcode byte read from memory (address bus = IP).</summary>
     Fetch,
 
-    /// <summary>A byte was read from memory (operand, data or stack).</summary>
+    /// <summary>A byte was read from memory (operand, data, stack or vector).</summary>
     Read,
 
     /// <summary>A byte was written to memory (data or stack).</summary>
@@ -33,6 +33,18 @@ public enum MicroOpKind
     /// <summary>A byte was written to an output port.</summary>
     Output,
 
+    /// <summary>A byte was read from an input port.</summary>
+    Input,
+
+    /// <summary>An interrupt request was acknowledged (<see cref="MicroOp.Value"/> = IRQ number, <see cref="MicroOp.Address"/> = handler).</summary>
+    Interrupt,
+
+    /// <summary>The processor idled for some cycles waiting for an interrupt.</summary>
+    Wait,
+
+    /// <summary>The timing model reported something about the micro-architecture (cache, prefetch queue, branch predictor).</summary>
+    Timing,
+
     /// <summary>The processor halted normally.</summary>
     Halt,
 
@@ -50,13 +62,13 @@ public sealed record MicroOp
     /// <summary>What happened.</summary>
     public MicroOpKind Kind { get; init; }
 
-    /// <summary>Register name, ALU operation, access purpose, fault kind or jump condition.</summary>
+    /// <summary>Register name, ALU operation, access purpose, fault kind, jump condition or timing event name.</summary>
     public string? Name { get; init; }
 
     /// <summary>Memory address, port number or jump target. -1 when not applicable.</summary>
     public int Address { get; init; } = -1;
 
-    /// <summary>Byte transferred on the data bus, ALU result, output value or 1/0 for a taken jump.</summary>
+    /// <summary>Byte transferred on the data bus, ALU result, output value, cycles, or 1/0 for a taken jump.</summary>
     public int Value { get; init; }
 
     /// <summary>Register / flags value before the change, or ALU operand A.</summary>
@@ -65,7 +77,7 @@ public sealed record MicroOp
     /// <summary>Register / flags value after the change, or ALU operand B.</summary>
     public int After { get; init; }
 
-    /// <summary>Human readable text (disassembly or fault message).</summary>
+    /// <summary>Human readable text (disassembly, timing event or fault message).</summary>
     public string? Text { get; init; }
 
     public static MicroOp Fetch(int address, byte opcode) =>
@@ -98,24 +110,42 @@ public sealed record MicroOp
     public static MicroOp Output(int port, byte value) =>
         new() { Kind = MicroOpKind.Output, Address = port, Value = value, Name = "port" };
 
+    public static MicroOp Input(int port, byte value) =>
+        new() { Kind = MicroOpKind.Input, Address = port, Value = value, Name = "port" };
+
+    public static MicroOp Interrupt(int irq, int handler) =>
+        new() { Kind = MicroOpKind.Interrupt, Name = $"IRQ{irq}", Value = irq, Address = handler, Text = $"IRQ{irq} -> 0x{handler:X4}" };
+
+    public static MicroOp Wait(int cycles) =>
+        new() { Kind = MicroOpKind.Wait, Name = "wait", Value = cycles, Text = "waiting for an interrupt" };
+
+    public static MicroOp Timing(string name, string text, int cycles, int address = -1) =>
+        new() { Kind = MicroOpKind.Timing, Name = name, Text = text, Value = cycles, Address = address };
+
     public static MicroOp Halt() =>
         new() { Kind = MicroOpKind.Halt, Name = "HLT" };
 
     public static MicroOp Fault(FaultKind fault, string message) =>
         new() { Kind = MicroOpKind.Fault, Name = fault.ToString(), Text = message };
 
+    private static string Hex(int value) => value > 0xFF ? value.ToString("X4") : value.ToString("X2");
+
     public override string ToString() => Kind switch
     {
-        MicroOpKind.Fetch => $"FETCH  [{Address:X2}] -> IR = {Value:X2}",
-        MicroOpKind.Read => $"READ   [{Address:X2}] -> {Value:X2} ({Name})",
-        MicroOpKind.Write => $"WRITE  [{Address:X2}] <- {Value:X2} ({Name})",
+        MicroOpKind.Fetch => $"FETCH  [{Address:X4}] -> IR = {Value:X2}",
+        MicroOpKind.Read => $"READ   [{Address:X4}] -> {Value:X2} ({Name})",
+        MicroOpKind.Write => $"WRITE  [{Address:X4}] <- {Value:X2} ({Name})",
         MicroOpKind.Decode => $"DECODE {Value:X2} = {Text}",
         MicroOpKind.Execute => $"EXEC   {Name}",
-        MicroOpKind.Alu => $"ALU    {Name} {Before:X2}, {After:X2} -> {Value:X2}",
-        MicroOpKind.Register => $"REG    {Name} {Before:X2} -> {After:X2}",
+        MicroOpKind.Alu => $"ALU    {Name} {Hex(Before)}, {Hex(After)} -> {Hex(Value)}",
+        MicroOpKind.Register => $"REG    {Name} {Hex(Before)} -> {Hex(After)}",
         MicroOpKind.Flags => $"FLAGS  {ProcessorState.FormatFlags((byte)Before)} -> {Text}",
-        MicroOpKind.Jump => $"JUMP   {Name} -> {Address:X2} ({(Value != 0 ? "taken" : "not taken")})",
+        MicroOpKind.Jump => $"JUMP   {Name} -> {Address:X4} ({(Value != 0 ? "taken" : "not taken")})",
         MicroOpKind.Output => $"OUT    port {Address} <- {Value}",
+        MicroOpKind.Input => $"IN     port {Address} -> {Value}",
+        MicroOpKind.Interrupt => $"INTR   {Text}",
+        MicroOpKind.Wait => $"WAIT   {Value} cycles",
+        MicroOpKind.Timing => $"TIMING {Name}: {Text} (+{Value})",
         MicroOpKind.Halt => "HALT",
         MicroOpKind.Fault => $"FAULT  {Name}: {Text}",
         _ => Kind.ToString(),
