@@ -67,10 +67,24 @@ html[data-theme="light"] {
 ::-webkit-scrollbar-thumb:hover { background-color: rgba(var(--cyan-rgb), .8); }
 ::-webkit-scrollbar-thumb:active { background-color: var(--cyan); }
 
+/* The page itself: a slightly wider pill floating on a track in the page background colour. */
+html { scrollbar-gutter: stable; }
+html::-webkit-scrollbar { width: 12px; height: 12px; }
+html::-webkit-scrollbar-track { background: var(--bg); }
+html::-webkit-scrollbar-thumb {
+  background-color: rgba(var(--cyan-rgb), .4);
+  border: 3px solid var(--bg);
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+html::-webkit-scrollbar-thumb:hover { background-color: rgba(var(--cyan-rgb), .8); }
+html::-webkit-scrollbar-thumb:active { background-color: var(--cyan); }
+
 /* Firefox and other engines without the WebKit pseudo-elements. */
 @supports not selector(::-webkit-scrollbar) {
   * { scrollbar-width: thin; scrollbar-color: rgba(var(--blue-rgb), .35) transparent; }
   *:hover { scrollbar-color: rgba(var(--cyan-rgb), .6) transparent; }
+  html { scrollbar-width: auto; scrollbar-color: rgba(var(--cyan-rgb), .55) var(--bg); }
 }
 
 html, body { margin: 0; min-height: 100%; }
