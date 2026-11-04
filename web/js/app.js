@@ -1084,7 +1084,7 @@
 
   /** Looks for the CISCProcessorWeb API next to the page; when it answers, the .NET engine becomes available. */
   async function detectServer() {
-    if (location.protocol === 'file:') return;
+    if (location.protocol === 'file:' || location.hostname.endsWith('github.io')) return;
     const base = location.pathname.replace(/[^/]*$/, '');
     const info = await RemoteEngine.detect(base);
     if (!info) return;

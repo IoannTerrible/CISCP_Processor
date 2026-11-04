@@ -310,7 +310,9 @@ Two ways to open it:
 
    then open <http://localhost:5080>. The page detects the server and shows an *Engine* selector (`.NET server` / `JavaScript (browser)`). While running from the source tree the host serves the repository's `web/` folder directly.
 
-2. **Static**: open `web/index.html` in a browser, or publish the `web/` folder anywhere (GitHub Pages works). The page then runs on its JavaScript mirror of the processor and of the three timing models, which produce the same traces and cycle counts as the C# library.
+2. **Static**: open `web/index.html` in a browser, or publish the `web/` folder anywhere. The page then runs on its JavaScript mirror of the processor and of the three timing models, which produce the same traces and cycle counts as the C# library.
+
+3. **GitHub Pages**: the workflow in `.github/workflows/pages.yml` publishes `web/` on every push to `master` that touches it. Enable it once under *Settings -> Pages -> Source: GitHub Actions*; the site then appears at `https://<user>.github.io/<repository>/`. Pages hosts static files only, so the *Engine* selector does not appear there and programs run on the JavaScript engine.
 
 What the page shows:
 
@@ -402,6 +404,7 @@ docs/visualizer.png            screenshot
 
 ## Changelog 📝
 
+- **0_015** - GitHub Pages workflow for the visualizer.
 - **0_014** - README for version 0.20.
 - **0_013** - Visualizer for CISC-16: era selector with the micro-architecture block (T-states, prefetch queue, caches and branch predictor), 16 bit registers, paged 64 KB memory window, devices panel with interrupt lines, timer and input device, interrupt and wait steps in the trace; web host API with micro-architecture selection and input; JavaScript mirror of the timing models.
 - **0_012** - CISC-16 core: 64 KB address space with 16 bit `IP`, `SP`, `BP`, `SI`, `DI`, register indirect and based addressing, 16 bit immediates and `.dw`, the `I` flag with eight interrupt lines, a vector table, `EI` / `DI` / `INT` / `IRET` and `HLT` that waits for an interrupt, a port bus with a programmable timer and an input device (`IN`), string instructions with `REP`, `ENTER` / `LEAVE`, `JMP [XR]`, `LEA`, 16 bit `MUL` / `DIV` with the divide overflow fault, and the three timing models (1975 multi-cycle, 1985 prefetch queue, 1995 pipeline with caches and branch prediction) reporting their events into the trace. Demo with `--arch` and `--input`, 329 tests.
