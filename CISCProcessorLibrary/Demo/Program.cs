@@ -1,128 +1,90 @@
-﻿using System;
 using CISCProcessorLibrary;
 
-namespace CISCProcessorDemo
+namespace CISCProcessorDemo;
+
+/// <summary>
+/// Console front end of the CISC-8 simulator.
+/// Run without arguments for the interactive menu, or pass an assembly file / sample id to run it directly.
+/// </summary>
+internal static class Program
 {
-    class Program
+    private static int Main(string[] args)
     {
-        static void Main(string[] args)
+        try
         {
-            StackProcessor processor = new StackProcessor(); // Use StackProcessor instead of CISCProcessor
-            InitializeRegisters(processor); // Initialize registers
+            Options options = Options.Parse(args);
+            ConsoleUi.ColorsEnabled = !options.NoColor;
 
-            // Push values onto the stack
-            processor.Push(100);
-            processor.Push(200);
-            processor.Push(300);
-
-            // Pop values from the stack
-            int value1 = processor.Pop();
-            int value2 = processor.Pop();
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\n-- Popped values from the stack --");
-            Console.WriteLine($"Value 1: {value1}");
-            Console.WriteLine($"Value 2: {value2}");
-            Console.ResetColor();
-
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("\n-- Program execution started --");
-            Console.ResetColor();
-
-            bool addMoreInstructions = true;
-            List<string> userChoices = new List<string>();
-
-            while (addMoreInstructions)
+            if (options.ShowHelp)
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("\nChoose an instruction to add:");
-                Console.WriteLine("1. Load Immediate");
-                Console.WriteLine("2. Add with Carry");
-                Console.WriteLine("3. Subtract with Borrow");
-                Console.WriteLine("4. Jump If Zero");
-                Console.WriteLine("5. Store To Memory");
-                Console.WriteLine("6. Exit");
-                Console.ResetColor();
+                PrintUsage();
+                return 0;
+            }
 
-                Console.Write("Enter your choice: ");
-                string input = Console.ReadLine();
+            if (options.ListSamples)
+            {
+                ListSamples();
+                return 0;
+            }
 
-                switch (input)
+            if (options.SampleId is not null)
+            {
+                SampleProgram? sample = SamplePrograms.Find(options.SampleId);
+                if (sample is null)
                 {
-                    case "1":
-                        Console.Write("Enter the immediate value: ");
-                        int immediateValue = Convert.ToInt32(Console.ReadLine());
-                        processor.AddInstruction(new LoadImmediateInstruction(processor, immediateValue));
-                        userChoices.Add($"Load Immediate with value {immediateValue}");
-                        break;
-                    case "2":
-                        Console.Write("Enter the value to add with carry: ");
-                        int addValue = Convert.ToInt32(Console.ReadLine());
-                        processor.AddInstruction(new AddWithCarryInstruction(processor, addValue));
-                        userChoices.Add($"Add with Carry by {addValue}");
-                        break;
-                    case "3":
-                        Console.Write("Enter the value to subtract with borrow: ");
-                        int subtractValue = Convert.ToInt32(Console.ReadLine());
-                        processor.AddInstruction(new SubtractWithBorrowInstruction(processor, subtractValue));
-                        userChoices.Add($"Subtract with Borrow by {subtractValue}");
-                        break;
-                    case "4":
-                        Console.Write("Enter the jump offset: ");
-                        int jumpOffset = Convert.ToInt32(Console.ReadLine());
-                        processor.AddInstruction(new JumpIfZeroInstruction(processor, jumpOffset));
-                        userChoices.Add($"Jump If Zero with offset {jumpOffset}");
-                        break;
-                    case "5":
-                        processor.AddInstruction(new StoreToMemoryInstruction(processor));
-                        userChoices.Add("Store To Memory");
-                        break;
-                    case "6":
-                        addMoreInstructions = false;
-                        break;
-                    default:
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Invalid choice. Please try again.");
-                        Console.ResetColor();
-                        break;
+                    ConsoleUi.Error($"Unknown sample '{options.SampleId}'. Use --list to see the available ids.");
+                    return 2;
                 }
+                return Runner.Run(sample.Name, sample.Source, options) ? 0 : 1;
             }
 
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\nInstructions added by the user:");
-            foreach (var choice in userChoices)
+            if (options.FilePath is not null)
             {
-                Console.WriteLine(choice);
+                if (!File.Exists(options.FilePath))
+                {
+                    ConsoleUi.Error($"File not found: {options.FilePath}");
+                    return 2;
+                }
+                string source = File.ReadAllText(options.FilePath);
+                return Runner.Run(Path.GetFileName(options.FilePath), source, options) ? 0 : 1;
             }
-            Console.ResetColor();
 
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("\n-- Executing added instructions --");
-            Console.ResetColor();
-
-            processor.ExecuteInstructions(processor.Instructions);
-
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\n-- Execution results --");
-            Console.WriteLine($"Accumulator: {processor.Accumulator}");
-            Console.WriteLine($"Zero Flag: {processor.IsFlagSet(Flag.Zero)}");
-            Console.WriteLine($"Carry Flag: {processor.IsFlagSet(Flag.Carry)}");
-            Console.ResetColor();
+            new InteractiveMenu(options).Run();
+            return 0;
         }
-
-        static void InitializeRegisters(CISCProcessor processor)
+        catch (ArgumentException ex)
         {
-            for (int i = 0; i < processor.GeneralPurposeRegisters.Length; i++)
-            {
-                processor.GeneralPurposeRegisters[i] = i * 10;
-            }
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("\n-- Initialized General Purpose Registers --");
-            Console.ResetColor();
-            for (int i = 0; i < processor.GeneralPurposeRegisters.Length; i++)
-            {
-                Console.WriteLine($"Register {i}: {processor.GeneralPurposeRegisters[i]}");
-            }
+            ConsoleUi.Error(ex.Message);
+            PrintUsage();
+            return 2;
         }
+    }
+
+    private static void ListSamples()
+    {
+        ConsoleUi.Title("Sample programs");
+        foreach (SampleProgram sample in SamplePrograms.All)
+        {
+            ConsoleUi.Write($"  {sample.Id,-10}", ConsoleColor.Cyan);
+            Console.WriteLine($" {sample.Name} - {sample.Description}");
+        }
+    }
+
+    private static void PrintUsage()
+    {
+        ConsoleUi.Title($"{SimulatorInfo.Name} processor simulator {SimulatorInfo.Version}");
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  Demo                         interactive menu");
+        Console.WriteLine("  Demo <program.asm> [options] assemble and run a file");
+        Console.WriteLine("  Demo --sample <id> [options] run a built-in sample (see --list)");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --trace        print every executed instruction with the registers after it");
+        Console.WriteLine("  --micro        also print the micro-operations (bus cycles, ALU, register writes)");
+        Console.WriteLine("  --delay <ms>   pause between instructions to watch the trace unfold");
+        Console.WriteLine("  --max <n>      instruction budget before an endless loop is stopped (default 100000)");
+        Console.WriteLine("  --no-color     plain output");
+        Console.WriteLine("  --list         list the sample program ids");
+        Console.WriteLine("  --help         this text");
     }
 }
