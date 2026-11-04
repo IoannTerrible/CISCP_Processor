@@ -95,6 +95,13 @@
     "input": "hello, cisc-16!"
   },
   {
+    "id": "primes",
+    "name": "Prime numbers (long run)",
+    "description": "Prints every prime below 256 by counting divisors: about 200 thousand instructions, a few seconds at full speed and a benchmark for the three eras.",
+    "source": "; Print every prime below 256. For each candidate n the program counts the divisors\n; between 2 and n / 2; n is prime when the count stays zero.\n; About 200 thousand instructions: a long run for the full speed mode.\n        MOV R0, 2           ; candidate n\nnext:   MOV A, R0\n        SHR A\n        MOV R3, A           ; limit = n / 2\n        MOV R2, 0           ; divisor count\n        MOV R1, 2           ; divisor d\ntrial:  MOV A, R1\n        CMP A, R3\n        JC test             ; d < limit\n        JZ test             ; d == limit\n        JMP done            ; d > limit: all divisors tried\ntest:   MOV R7, 0           ; dividend R7:A = n\n        MOV A, R0\n        DIV R1              ; R7 = n mod d\n        MOV A, R7\n        CMP A, 0\n        JNZ skip\n        INC R2              ; d divides n\nskip:   INC R1\n        JMP trial\ndone:   MOV A, R2\n        CMP A, 0\n        JNZ composite       ; at least one divisor\n        MOV A, R0\n        OUT 0, A            ; n is prime\ncomposite:\n        INC R0\n        JNZ next            ; R0 wraps to 0 after 255: all candidates done\n        HLT",
+    "input": null
+  },
+  {
     "id": "fault",
     "name": "Hardware fault",
     "description": "Divides by a zero register so the processor stops with a DivideByZero fault.",

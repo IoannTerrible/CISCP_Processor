@@ -20,6 +20,7 @@ public class SampleProgramTests
     [InlineData("jumptable", "O")]
     [InlineData("interrupt", "1 2 3 4 5")]
     [InlineData("echo", "HELLO, CISC-16!")]
+    [InlineData("primes", "2 3 5 7 11 13 17 19 23 29 31 37 41 43 47 53 59 61 67 71 73 79 83 89 97 101 103 107 109 113 127 131 137 139 149 151 157 163 167 173 179 181 191 193 197 199 211 223 227 229 233 239 241 251")]
     public void Sample_ProducesTheExpectedOutput(string id, string expected)
     {
         SampleProgram sample = SamplePrograms.Find(id)!;
@@ -41,6 +42,7 @@ public class SampleProgramTests
     [InlineData("jumptable")]
     [InlineData("interrupt")]
     [InlineData("echo")]
+    [InlineData("primes")]
     public void Sample_HaltsNormally_WithACleanStack(string id)
     {
         SampleProgram sample = SamplePrograms.Find(id)!;
@@ -48,7 +50,7 @@ public class SampleProgramTests
         cpu.LoadProgram(sample.Source);
         if (sample.Input is not null) cpu.InputDevice.Enqueue(sample.Input);
 
-        RunResult result = cpu.Run(20_000);
+        RunResult result = cpu.Run(500_000);
 
         Assert.Equal(StopReason.Halted, result.Reason);
         Assert.Equal(FaultKind.None, cpu.Fault);
@@ -68,6 +70,6 @@ public class SampleProgramTests
     {
         Assert.Equal(SamplePrograms.All.Count, SamplePrograms.All.Select(s => s.Id).Distinct().Count());
         Assert.Null(SamplePrograms.Find("does-not-exist"));
-        Assert.Equal(14, SamplePrograms.All.Count);
+        Assert.Equal(15, SamplePrograms.All.Count);
     }
 }

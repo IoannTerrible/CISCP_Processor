@@ -15,7 +15,7 @@ internal sealed class Options
 
     public int DelayMilliseconds { get; set; }
 
-    public int MaxSteps { get; private set; } = 100_000;
+    public int MaxSteps { get; private set; } = 1_000_000;
 
     public bool NoColor { get; private set; }
 

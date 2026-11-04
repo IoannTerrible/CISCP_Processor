@@ -136,6 +136,7 @@
   // ----------------------------------------------------------------- state ----
 
   const DELAYS = [0, 520, 340, 220, 140, 90, 55, 30, 14, 5, 0];
+  const TURBO_BATCH = 1500;   // steps per animation frame without animation
 
   const ui = {
     engine: new LocalEngine(),
@@ -711,7 +712,7 @@
     el.consoleText.appendChild(span);
   }
 
-  function appendTrace(trace) {
+  function traceRow(trace) {
     const row = document.createElement('div');
     row.className = 'trow ' + trace.kind + (trace.state.fault ? ' fault' : '');
     row.innerHTML = '<span class="taddr"></span><span class="tbytes"></span><span class="ttext"></span><span class="tcyc"></span>';
@@ -719,9 +720,33 @@
     row.children[1].textContent = trace.bytes.map(hex2).join(' ');
     row.children[2].textContent = trace.state.fault ? trace.disassembly + '  ' + trace.state.fault : trace.disassembly;
     row.children[3].textContent = trace.cycles ? trace.cycles + ' ' + t('trace.cyc') : '';
-    el.trace.appendChild(row);
-    ui.traceRows++;
-    while (ui.traceRows > 400) { el.trace.removeChild(el.trace.firstChild); ui.traceRows--; }
+    return row;
+  }
+
+  function appendTrace(trace) {
+    appendTraces([trace]);
+  }
+
+  /** Output without the pop animation, for batches: text nodes instead of animated spans. */
+  function appendOutputQuietly(port, value) {
+    const text = port === 1 ? String.fromCharCode(value) : (ui.outputCount > 0 ? ' ' : '') + value;
+    if (port !== 1) ui.outputCount++;
+    const last = el.consoleText.lastChild;
+    if (last && last.nodeType === 3) last.nodeValue += text;
+    else el.consoleText.appendChild(document.createTextNode(text));
+  }
+
+  /** Appends several trace rows at once: one DOM insertion, one trim, one scroll. */
+  function appendTraces(traces) {
+    const fragment = document.createDocumentFragment();
+    for (const trace of traces) fragment.appendChild(traceRow(trace));
+    el.trace.appendChild(fragment);
+    ui.traceRows += traces.length;
+    if (ui.traceRows > 400) {
+      const excess = ui.traceRows - 400;
+      for (let i = 0; i < excess; i++) el.trace.removeChild(el.trace.firstChild);
+      ui.traceRows = 400;
+    }
     el.trace.scrollTop = el.trace.scrollHeight;
   }
 
@@ -914,7 +939,7 @@
   function applyTraceQuietly(trace) {
     for (const op of trace.ops) {
       if (op.kind === 'write') { ui.memory[op.address] = op.value; renderCell(op.address); }
-      else if (op.kind === 'output') { if (op.address === 0 || op.address === 1) appendOutput(op.address, op.value); }
+      else if (op.kind === 'output') { if (op.address === 0 || op.address === 1) appendOutputQuietly(op.address, op.value); }
       else if (op.kind === 'input') { if ((op.address === 0 || op.address === 1) && ui.inputQueue.length && op.value !== 0) ui.inputQueue = ui.inputQueue.slice(1); }
       else if (op.kind === 'halt') { if (!op.text) el.die.classList.add('halted'); }
       else if (op.kind === 'fault') el.die.classList.add('fault');
@@ -997,14 +1022,14 @@
       if (delay() === 0) {
         let traces;
         try {
-          traces = await ui.engine.batch(512, ui.breakpoints);
+          traces = await ui.engine.batch(TURBO_BATCH, ui.breakpoints);
         } catch (error) {
           setStatusText('error', error.message);
           break;
         }
         for (const trace of traces) applyTraceQuietly(trace);
         if (traces.length) {
-          for (const trace of traces.slice(-40)) appendTrace(trace);
+          appendTraces(traces.slice(-40));
           syncAfterBatch(traces);
         }
         await nextFrame();

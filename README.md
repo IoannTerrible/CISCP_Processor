@@ -69,6 +69,7 @@ The same programs, measured by the simulator (clock cycles until `HLT`):
 | Fibonacci | 91 | 790 | 636 | 217 |
 | Hello, CISC! | 65 | 569 | 490 | 183 |
 | Bubble sort | 253 | 2931 | 2276 | 397 |
+| Prime numbers | 181142 | 1867014 | 1708365 | 813243 |
 
 The numbers are the model's, not a particular chip's, but they move the way history did: the prefetch queue takes the fetch time off the critical path, the pipeline and the caches bring the cost of a simple instruction down to one cycle, and branches become the thing that hurts.
 
@@ -382,6 +383,7 @@ dotnet test CISCProcessorLibrary
 | `jumptable` | Jump table | `JMP [SI]` through a `.dw` table |
 | `interrupt` | Timer interrupt | the timer on IRQ 0, `EI`, `HLT` waiting for an interrupt, `IRET`, the vector table |
 | `echo` | Input echo | `IN A, 6` / `IN A, 1` reading the input device |
+| `primes` | Prime numbers | divisor counting over 2..255, about 180 thousand instructions: a long run for the full-speed mode and a benchmark for the eras |
 | `fault` | Hardware fault | `DIV` by zero halting the processor with a fault |
 
 ## Repository layout 📁
@@ -405,6 +407,7 @@ docs/visualizer.png            screenshot
 
 ## Changelog 📝
 
+- **0_019** - Long-running `primes` sample; one-screen layout on wide displays (the window height is shared by the panels, which scroll inside), denser die and device blocks; faster full-speed mode.
 - **0_018** - Russian interface, instruction reference and sample names; a built-in guide (stand, screen, architecture, assembly language, instruction groups, eras, devices, memory window) in English and Russian; EN / RU switch.
 - **0_017** - Styled page scrollbar.
 - **0_016** - Styled scrollbars in the panels.

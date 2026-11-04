@@ -6,7 +6,7 @@ namespace CISCProcessorLibrary.Tests;
 internal static class TestHelpers
 {
     /// <summary>Assembles, loads and runs <paramref name="source"/> on a fresh processor.</summary>
-    public static CISCProcessor Run(string source, Microarchitecture microarchitecture = Microarchitecture.Classic1975, int maxSteps = 20_000)
+    public static CISCProcessor Run(string source, Microarchitecture microarchitecture = Microarchitecture.Classic1975, int maxSteps = 500_000)
     {
         var cpu = new CISCProcessor(microarchitecture);
         cpu.LoadAndRemember(source);
@@ -26,7 +26,7 @@ internal static class TestHelpers
         };
         cpu.LoadProgram(source);
         if (input is not null) cpu.InputDevice.Enqueue(input);
-        cpu.Run(20_000);
+        cpu.Run(500_000);
         return text.ToString().TrimEnd();
     }
 

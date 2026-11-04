@@ -86,7 +86,7 @@ internal static class Program
         Console.WriteLine("  --micro        also print the micro-operations (bus cycles, ALU, register writes, timing events)");
         Console.WriteLine("  --delay <ms>   pause between instructions to watch the trace unfold");
         Console.WriteLine("  --input <text> queue text into the input device (read with IN A, 1)");
-        Console.WriteLine("  --max <n>      step budget before an endless loop is stopped (default 100000)");
+        Console.WriteLine("  --max <n>      step budget before an endless loop is stopped (default 1000000)");
         Console.WriteLine("  --no-color     plain output");
         Console.WriteLine("  --list         list the sample program ids");
         Console.WriteLine("  --help         this text");

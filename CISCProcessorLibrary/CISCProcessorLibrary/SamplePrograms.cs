@@ -305,6 +305,45 @@ public static class SamplePrograms
         """,
         "hello, cisc-16!");
 
+    public static readonly SampleProgram Primes = new(
+        "primes",
+        "Prime numbers (long run)",
+        "Prints every prime below 256 by counting divisors: about 200 thousand instructions, a few seconds at full speed and a benchmark for the three eras.",
+        """
+        ; Print every prime below 256. For each candidate n the program counts the divisors
+        ; between 2 and n / 2; n is prime when the count stays zero.
+        ; About 200 thousand instructions: a long run for the full speed mode.
+                MOV R0, 2           ; candidate n
+        next:   MOV A, R0
+                SHR A
+                MOV R3, A           ; limit = n / 2
+                MOV R2, 0           ; divisor count
+                MOV R1, 2           ; divisor d
+        trial:  MOV A, R1
+                CMP A, R3
+                JC test             ; d < limit
+                JZ test             ; d == limit
+                JMP done            ; d > limit: all divisors tried
+        test:   MOV R7, 0           ; dividend R7:A = n
+                MOV A, R0
+                DIV R1              ; R7 = n mod d
+                MOV A, R7
+                CMP A, 0
+                JNZ skip
+                INC R2              ; d divides n
+        skip:   INC R1
+                JMP trial
+        done:   MOV A, R2
+                CMP A, 0
+                JNZ composite       ; at least one divisor
+                MOV A, R0
+                OUT 0, A            ; n is prime
+        composite:
+                INC R0
+                JNZ next            ; R0 wraps to 0 after 255: all candidates done
+                HLT
+        """);
+
     public static readonly SampleProgram DivideByZero = new(
         "fault",
         "Hardware fault",
@@ -321,7 +360,7 @@ public static class SamplePrograms
     public static IReadOnlyList<SampleProgram> All { get; } = new[]
     {
         Countdown, SumArray, Fibonacci, Factorial, Hello, Stack, BubbleSort,
-        Strings, Scan, Frames, JumpTable, Interrupt, Echo, DivideByZero,
+        Strings, Scan, Frames, JumpTable, Interrupt, Echo, Primes, DivideByZero,
     };
 
     /// <summary>Finds a sample by its id (case-insensitive).</summary>
